@@ -360,15 +360,25 @@ reads:
 Apply with:
 
 ```bash
-# Dry-run first (set enforcement: "evaluate" temporarily in the JSON
-# to log what would have been blocked without blocking it)
-
 gh api -X POST /orgs/CCTC-team/rulesets \
   --input rulesets/cctc-regulated-non-critical.json
 
 gh api -X POST /orgs/CCTC-team/rulesets \
   --input rulesets/cctc-critical-trial.json
 ```
+
+**Evaluate mode (recommended for multi-developer estates).** GitHub
+Rulesets support a log-only mode that records violations without
+blocking pushes. Before running the apply command above, temporarily
+change `"enforcement": "active"` to `"enforcement": "evaluate"` in
+the JSON. After applying, watch the org's ruleset insights
+(Organization → Settings → Rules → Insights) for a couple of weeks.
+Once the violations stop, change the field back to `"active"` and
+re-apply with `PUT /orgs/CCTC-team/rulesets/{id}`.
+
+Single-developer estates can skip evaluate mode and apply active
+directly — the developer is the only person who could trigger a
+violation, and they can fix their own signing setup quickly if needed.
 
 Verify either ruleset is live:
 
@@ -397,17 +407,21 @@ query above.
       each one
 - [x] Apply the baseline org Ruleset (force-push + deletion blocked on
       `main` and `develop` across all repos, no bypass actors)
-- [ ] Roll out universal commit signing for everyone pushing to
-      regulated repos (shared precondition for both category rulesets;
-      see `docs/commit-signing-setup.md`)
-- [ ] Apply org Ruleset `cctc-regulated-non-critical` (JSON drafted at
-      `rulesets/cctc-regulated-non-critical.json`; blocked on the
-      break-glass identity being named so `bypass_actors` can be
-      populated, and on the universal-signing rollout above)
+- [ ] Roll out universal commit signing to every developer pushing to
+      regulated repos (each person completes
+      `docs/commit-signing-setup.md` and has at least one Verified
+      commit on their record)
+- [ ] Apply org Ruleset `cctc-regulated-non-critical` in
+      `enforcement: "evaluate"` initially if more than one developer is
+      pushing — gives a log-only view of unsigned violations without
+      blocking anyone; flip to `active` once the rollout list above is
+      cleared. Single-developer estates can skip evaluate mode and
+      apply active directly. JSON at
+      `rulesets/cctc-regulated-non-critical.json`.
 - [ ] Apply org Ruleset `cctc-critical-trial` (JSON drafted at
-      `rulesets/cctc-critical-trial.json`; blocked on the
-      universal-signing rollout above and on closing the
-      non-developer-approver gap for each `critical-trial` repo)
+      `rulesets/cctc-critical-trial.json`; same evaluate-then-active
+      pattern; additionally blocked on closing the non-developer-
+      approver gap for each `critical-trial` repo)
 - [ ] Provision the `CCTC Compliance Drift` GitHub App and add the secrets
       `ORG_COMPLIANCE_DRIFT_APP_ID` / `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY`
       (drift workflow will then scaffold tagged repos on next run)
