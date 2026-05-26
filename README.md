@@ -11,6 +11,7 @@ This repo is private, so the defaults only flow into other **private** repos.
 | --- | --- |
 | `.github/ISSUE_TEMPLATE/bug_report.yml` | Standard bug-report form |
 | `.github/ISSUE_TEMPLATE/feature_request.yml` | Standard feature-request form |
+| `.github/ISSUE_TEMPLATE/validation.yml` | GCP validation & verification form |
 | `.github/ISSUE_TEMPLATE/config.yml` | Disables blank issues; adds security + support contact links |
 | `.github/pull_request_template.md` | Default PR template with clinical/compliance checklist |
 | `.github/CODEOWNERS` | Reviewers for this repo (does **not** propagate to other repos) |
@@ -59,7 +60,7 @@ Requires `gh` (authenticated) and `jq`. The script is idempotent.
 - [x] Create the `CCTC Label Sync` GitHub App (org-owned, Issues: read & write,
       installed on all repositories) and add the org secrets
       `ORG_LABEL_SYNC_APP_ID` and `ORG_LABEL_SYNC_APP_PRIVATE_KEY`
-- [ ] Audit existing repos for legacy `ISSUE_TEMPLATE.md` files that will
+- [x] Audit existing repos for legacy `ISSUE_TEMPLATE.md` files that will
       override these defaults
 - [ ] Create template repositories for the standard project shapes (e.g. Blazor
       Server clinical app)

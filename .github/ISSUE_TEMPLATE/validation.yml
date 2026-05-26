@@ -1,0 +1,48 @@
+name: Validation & Verification
+description: Log V&V work — verifying that a feature meets its specification (per GCP)
+title: "[V&V]: "
+labels: ["validation", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For validation / verification work under GCP. Use this when raising
+        a feature for V&V coverage or recording V&V results.
+  - type: textarea
+    id: description
+    attributes:
+      label: Brief description
+      description: What is being validated / verified?
+    validations:
+      required: true
+  - type: textarea
+    id: user-specs
+    attributes:
+      label: User specs
+      description: Which user requirements does this trace to?
+    validations:
+      required: true
+  - type: textarea
+    id: functional-scripts
+    attributes:
+      label: Functional scripts
+      description: Which functional script(s) cover this?
+  - type: textarea
+    id: test-files
+    attributes:
+      label: Test files
+      description: Which test file(s) cover this?
+  - type: checkboxes
+    id: pre-review
+    attributes:
+      label: Pre-review
+      options:
+        - label: Script(s) target the correct feature sufficiently
+        - label: The user requirements are met
+  - type: checkboxes
+    id: post-review
+    attributes:
+      label: Post-review
+      options:
+        - label: Script(s) target the correct feature sufficiently
+        - label: Script(s) appropriately test the feature
