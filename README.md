@@ -62,6 +62,15 @@ Requires `gh` (authenticated) and `jq`. The script is idempotent.
       `ORG_LABEL_SYNC_APP_ID` and `ORG_LABEL_SYNC_APP_PRIVATE_KEY`
 - [x] Audit existing repos for legacy `ISSUE_TEMPLATE.md` files that will
       override these defaults
-- [ ] Create template repositories for the standard project shapes (e.g. Blazor
-      Server clinical app)
 - [ ] Define org-level Rulesets for branch protection and required checks
+
+## Deliberately not done
+
+- **Template repositories.** GitHub supports flagging a repo as a template so
+  "Use this template" produces a pre-scaffolded new repo. We considered this
+  but decided against it: CCTC isn't expecting to spin up large new
+  applications at a rate that justifies the ongoing maintenance burden of
+  keeping a template (SDK pins, CI workflow, package versions, security
+  patches) current with the rest of the estate. New repos will continue to
+  be scaffolded by hand, copying from the closest existing project. Revisit
+  if the pace of new applications picks up.
