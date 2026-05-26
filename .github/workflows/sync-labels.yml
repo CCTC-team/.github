@@ -38,14 +38,14 @@ jobs:
 
       # Mint a short-lived installation token for the org-installed GitHub App.
       # Requires two org secrets:
-      #   ORG_LABEL_SYNC_APP_ID          — the App's numeric ID
+      #   ORG_LABEL_SYNC_APP_CLIENT_ID   — the App's Client ID (Iv23li…)
       #   ORG_LABEL_SYNC_APP_PRIVATE_KEY — full contents of the App's .pem private key
       # The App must be installed across the org with Issues: read & write.
       - name: Generate app token
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.ORG_LABEL_SYNC_APP_ID }}
+          client-id: ${{ secrets.ORG_LABEL_SYNC_APP_CLIENT_ID }}
           private-key: ${{ secrets.ORG_LABEL_SYNC_APP_PRIVATE_KEY }}
           owner: CCTC-team
 
