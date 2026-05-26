@@ -1,0 +1,26 @@
+# Sandbox / agent overlays — these appear in `git status` because the
+# Claude Code sandbox bind-mounts the user's home-dir dotfiles into the
+# repo. They are not real files in this repo and must not be committed.
+# Mirrors the pattern used in server-structure and TrialView.
+
+# Shell config
+.bash_profile
+.bashrc
+.profile
+.zprofile
+.zshrc
+
+# Other host-level config
+.gitconfig
+.gitmodules
+.ripgreprc
+.mcp.json
+
+# IDE
+.idea
+.idea/
+.vscode/
+
+# Claude Code project state — settings, local overrides, agents,
+# commands, skills are all per-user, not part of this repo.
+.claude/
