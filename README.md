@@ -258,9 +258,13 @@ share enough that splitting them adds maintenance without adding
 controls, while `critical-trial` carries hard regulatory hooks
 (segregation of duties, zero bypass) the others don't.
 
-**Status:** Ruleset B (`cctc-regulated-non-critical`) is live as of
-2026-05-26 (org ruleset id `16889857`). Ruleset A
-(`cctc-critical-trial`) remains pending — see preconditions below.
+**Status:** Ruleset B (`cctc-regulated-non-critical`) is deployed as
+of 2026-05-26 (org ruleset id `16889857`) in `enforcement: evaluate`
+(log-only) — violations show up in Organization → Settings → Rules →
+Insights without blocking pushes. Flip to `active` (and update
+`rulesets/cctc-regulated-non-critical.json` to match) once Insights
+shows a clean window. Ruleset A (`cctc-critical-trial`) remains
+pending — see preconditions below.
 
 #### Ruleset A — `cctc-critical-trial`
 
@@ -421,7 +425,9 @@ query above.
       with SSH signing (sole pusher to regulated repos today; re-open
       this item when adding a second developer)
 - [x] Apply org Ruleset `cctc-regulated-non-critical` (live as id
-      `16889857`, `enforcement: active`, `OrganizationAdmin` bypass)
+      `16889857`, `OrganizationAdmin` bypass; currently in
+      `enforcement: evaluate` — flip to `active` after a clean
+      Insights window)
 - [ ] Apply org Ruleset `cctc-critical-trial` (JSON drafted at
       `rulesets/cctc-critical-trial.json`; same evaluate-then-active
       pattern; additionally blocked on closing the non-developer-

@@ -1,7 +1,7 @@
 {
   "name": "cctc-regulated-non-critical",
   "target": "branch",
-  "enforcement": "active",
+  "enforcement": "evaluate",
   "bypass_actors": [
     { "actor_id": null, "actor_type": "OrganizationAdmin", "bypass_mode": "always" }
   ],
