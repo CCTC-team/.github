@@ -10,5 +10,9 @@
   { "name": "security",           "color": "b60205", "description": "Security-related" },
   { "name": "compliance",         "color": "5319e7", "description": "GDPR / regulatory" },
   { "name": "good first issue",   "color": "7057ff", "description": "Suitable for newcomers" },
-  { "name": "deferred",           "color": "c5def5", "description": "Logged for future consideration (feature freeze)" }
+  { "name": "deferred",           "color": "c5def5", "description": "Logged for future consideration (feature freeze)" },
+  { "name": "build",              "color": "5afc83", "description": "Build, packaging, or deployment" },
+  { "name": "validation",         "color": "216d15", "description": "Validation / verification per GCP" },
+  { "name": "breaking-change",    "color": "b60205", "description": "Backwards-incompatible change" },
+  { "name": "documentation",      "color": "0075ca", "description": "Documentation improvement" }
 ]
