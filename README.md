@@ -56,7 +56,7 @@ Requires `gh` (authenticated) and `jq`. The script is idempotent.
 - [x] Replace the support email placeholder in `.github/ISSUE_TEMPLATE/config.yml`
 - [x] Replace the security email placeholder in `SECURITY.md`
 - [x] Replace `@CCTC-team/maintainers` in `.github/CODEOWNERS` with the real team
-- [ ] Create the `CCTC Label Sync` GitHub App (org-owned, Issues: read & write,
+- [x] Create the `CCTC Label Sync` GitHub App (org-owned, Issues: read & write,
       installed on all repositories) and add the org secrets
       `ORG_LABEL_SYNC_APP_ID` and `ORG_LABEL_SYNC_APP_PRIVATE_KEY`
 - [ ] Audit existing repos for legacy `ISSUE_TEMPLATE.md` files that will
