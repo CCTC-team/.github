@@ -282,7 +282,7 @@ Targets `main`, `develop`.
 | --- | --- | --- |
 | Require PR | 1+ approving review | System validation (`trial-governance`); UK-GDPR Art 5(1)(f) integrity (`personal-data`) |
 | Dismiss stale reviews on push | enabled | Cheap uplift over a bare PR-required rule, no regulatory downside |
-| Signed commits | required | UK-GDPR Art 5(1)(f) integrity; ALCOA+ attributability applies across all regulated categories, not just `critical-trial` |
+| Signed commits | required | UK-GDPR Art 5(1)(f) integrity; ALCOA+ attributability applies across all regulated categories, not just `critical-trial` ([rationale](docs/alcoa-sdlc-rationale.md)) |
 
 **Bypass:** a single named break-glass identity — a specific org-admin
 user account, not a team, so audit-log attribution is unambiguous. Every
