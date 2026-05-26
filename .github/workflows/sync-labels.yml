@@ -21,11 +21,20 @@ on:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    # Self-hosted CCTC runner (see infrastructure/runners/README.md in
+    # server-structure). Org credits are exhausted; this is the bridge.
+    # Safe because the .github repo is private — see "Security boundaries"
+    # in the runner README.
+    runs-on: [self-hosted, linux, cctc]
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify required CLIs are present
+        run: |
+          command -v gh >/dev/null || { echo "gh not found on runner image"; exit 1; }
+          command -v jq >/dev/null || { echo "jq not found on runner image"; exit 1; }
 
       # Mint a short-lived installation token for the org-installed GitHub App.
       # Requires two org secrets:
