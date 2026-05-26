@@ -444,10 +444,11 @@ query above.
       test on 2026-05-26 saw 15 regulated repos and detected the
       expected `CONTRIBUTING-regulated.md` drift caused by the
       signed-commits sub-bullet added earlier in this session.
-- [ ] Bump `actions/create-github-app-token` from `@v1` to `@v2` in
-      `sync-labels.yml` and `compliance-drift.yml` before Node.js 20
-      is removed from runners on 2026-09-16 (warning surfaced during
-      the drift App smoke test).
+- [x] Bump `actions/create-github-app-token` from `@v1` to `@v3` in
+      `sync-labels.yml` and `compliance-drift.yml` (latest is v3.2.0;
+      v2 already superseded). Clears the Node 20 deprecation warning
+      seen during the drift App smoke test ahead of the 2026-09-16
+      runner removal.
 
 ## Deliberately not done
 

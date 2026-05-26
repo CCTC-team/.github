@@ -52,7 +52,7 @@ jobs:
       # expand the existing one. See README.md for setup notes.
       - name: Generate app token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.ORG_COMPLIANCE_DRIFT_APP_ID }}
           private-key: ${{ secrets.ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY }}

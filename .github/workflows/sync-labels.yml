@@ -43,7 +43,7 @@ jobs:
       # The App must be installed across the org with Issues: read & write.
       - name: Generate app token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.ORG_LABEL_SYNC_APP_ID }}
           private-key: ${{ secrets.ORG_LABEL_SYNC_APP_PRIVATE_KEY }}
