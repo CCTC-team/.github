@@ -449,12 +449,12 @@ query above.
       v2 already superseded). Clears the Node 20 deprecation warning
       seen during the drift App smoke test ahead of the 2026-09-16
       runner removal.
-- [ ] Switch the App-token action input from `app-id` (deprecated in
-      v3) to `client-id`. Needs each App's Client ID (`Iv23li…`,
-      visible in App settings) stored as a new org secret
-      (`ORG_LABEL_SYNC_APP_CLIENT_ID`, `ORG_COMPLIANCE_DRIFT_APP_CLIENT_ID`)
-      and the workflow `with:` blocks updated. `app-id` still works
-      today, just warns.
+- [x] Switch the App-token action input from `app-id` (deprecated in
+      v3) to `client-id`. New secrets `ORG_LABEL_SYNC_APP_CLIENT_ID`
+      and `ORG_COMPLIANCE_DRIFT_APP_CLIENT_ID` set (PRIVATE
+      visibility), workflow `with:` blocks updated, smoke test passed
+      via the sync-labels run on commit `da3fb44`. Orphaned
+      `ORG_*_APP_ID` secrets removed.
 
 ## Deliberately not done
 

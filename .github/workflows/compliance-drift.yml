@@ -47,9 +47,11 @@ jobs:
       #   - Metadata: read               (always required)
       #   - Custom properties: read      (list properties/values)
       #
-      # The existing ORG_LABEL_SYNC_APP has Issues:write only and is NOT
-      # sufficient — provision a second App (ORG_COMPLIANCE_DRIFT_APP) or
-      # expand the existing one. See README.md for setup notes.
+      # Requires two org secrets:
+      #   ORG_COMPLIANCE_DRIFT_APP_CLIENT_ID   — the App's Client ID (Iv23li…)
+      #   ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY — full contents of the App's .pem
+      # The label-sync App has Issues:write only and is NOT sufficient; this
+      # is a separate App with the four permissions above. See README.md.
       - name: Generate app token
         id: app-token
         uses: actions/create-github-app-token@v3

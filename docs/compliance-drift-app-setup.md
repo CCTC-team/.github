@@ -54,8 +54,11 @@ on a cron, it does not respond to GitHub-pushed events.
    account** (locks installation to CCTC-team).
 6. Click **Create GitHub App**.
 
-You now have the App. Note the **App ID** at the top of the
-settings page — you'll need it for the secret in step 4.
+You now have the App. Note the **Client ID** (a string starting
+`Iv23li…`, shown near the top of the settings page next to the
+App ID) — you'll need it for the secret in step 4. The numeric App
+ID is not required by the workflow; we use Client ID because the
+action's `app-id` input is deprecated in v3.
 
 ### 2. Generate a private key
 
@@ -76,10 +79,10 @@ settings page — you'll need it for the secret in step 4.
 ### 4. Add the two org secrets
 
 ```bash
-# App ID — pass the number you noted in step 1
-gh secret set ORG_COMPLIANCE_DRIFT_APP_ID \
+# Client ID — pass the Iv23li… string you noted in step 1
+gh secret set ORG_COMPLIANCE_DRIFT_APP_CLIENT_ID \
   --org CCTC-team --visibility private \
-  --body "<the-numeric-app-id>"
+  --body "<the-client-id>"
 
 # Private key — feed the .pem file directly so newlines are preserved
 gh secret set ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY \
@@ -114,8 +117,8 @@ gh run view --log --job="$(gh run list --workflow=compliance-drift.yml -L 1 --js
 Look for two things in the log:
 
 1. **The "Generate app token" step succeeds.** A failure here
-   indicates the App ID secret is wrong, the private key secret is
-   wrong/malformed, or the App isn't installed on the org.
+   indicates the Client ID secret is wrong, the private key secret
+   is wrong/malformed, or the App isn't installed on the org.
 2. **The repo enumeration step lists the regulated repos** (matching
    what `gh api /orgs/CCTC-team/properties/values --jq '.[] | select(.properties[0].value != "none")'`
    returns).
@@ -138,9 +141,9 @@ on a machine that left your control). To rotate:
 
 ## If something goes wrong
 
-- **`Bad credentials`** in the workflow log → App ID and private key
-  don't match. Re-check the App ID against the settings page; re-feed
-  the `.pem` into the secret.
+- **`Bad credentials`** in the workflow log → Client ID and private
+  key don't match. Re-check the Client ID against the settings page;
+  re-feed the `.pem` into the secret.
 - **`Resource not accessible by integration`** on a Contents or PR
   call → permissions missing. Re-check the four permission rows
   above; install-time changes need a re-acceptance from an org admin
