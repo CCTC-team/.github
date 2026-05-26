@@ -263,13 +263,16 @@ share enough that splitting them adds maintenance without adding
 controls, while `critical-trial` carries hard regulatory hooks
 (segregation of duties, zero bypass) the others don't.
 
-**Status:** Ruleset B (`cctc-regulated-non-critical`) is deployed as
-of 2026-05-26 (org ruleset id `16889857`) in `enforcement: evaluate`
-(log-only) — violations show up in Organization → Settings → Rules →
-Insights without blocking pushes. Flip to `active` (and update
-`rulesets/cctc-regulated-non-critical.json` to match) once Insights
-shows a clean window. Ruleset A (`cctc-critical-trial`) remains
-pending — see preconditions below.
+**Status:** Both category rulesets are deployed as of 2026-05-26 in
+`enforcement: evaluate` (log-only). Violations show up in
+Organization → Settings → Rules → Insights without blocking pushes.
+Flip each to `active` (and update the corresponding JSON in
+`rulesets/` to match) once Insights shows a clean window for it.
+
+| Ruleset | Org id | Mode | Pending flip-to-active condition |
+| --- | --- | --- | --- |
+| `cctc-regulated-non-critical` | `16889857` | evaluate | Clean Insights window |
+| `cctc-critical-trial` | `16892559` | evaluate | Clean Insights window AND a non-developer approver is set up for each `critical-trial` repo (ICH E6(R3) §3.16) — otherwise active mode will block solo-developer merges |
 
 #### Ruleset A — `cctc-critical-trial`
 
@@ -433,10 +436,13 @@ query above.
       `16889857`, `OrganizationAdmin` bypass; currently in
       `enforcement: evaluate` — flip to `active` after a clean
       Insights window)
-- [ ] Apply org Ruleset `cctc-critical-trial` (JSON drafted at
-      `rulesets/cctc-critical-trial.json`; same evaluate-then-active
-      pattern; additionally blocked on closing the non-developer-
-      approver gap for each `critical-trial` repo)
+- [x] Apply org Ruleset `cctc-critical-trial` (live as id `16892559`,
+      zero bypass; currently in `enforcement: evaluate`). Flip to
+      `active` is gated on (a) a clean Insights window and (b) a
+      non-developer approver per `critical-trial` repo so solo-
+      developer merges are no longer the steady state — the ruleset
+      itself is no longer the blocker, the organisational reviewer
+      gap is.
 - [x] Provision the `CCTC Compliance Drift` GitHub App (App ID
       `3874883`) with `ORG_COMPLIANCE_DRIFT_APP_ID` /
       `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY` org secrets (visibility
