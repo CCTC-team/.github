@@ -100,28 +100,59 @@ considered each one, not that you omitted it.
 | `personal-data` | Personal data, no trial nexus. UK GDPR / DPA only. | HR-adjacent tooling, contact databases |
 | `none` | Pure infrastructure. No `.compliance.yml` expected. | Dev tooling, infra repos |
 
-One-time setup (run as an org admin):
+One-time setup (run as an org admin). Pass JSON via stdin — `gh api -f`
+sends every value as a string and mangles nested objects, so the API
+rejects it:
 
 ```bash
-gh api -X PATCH /orgs/CCTC-team/properties/schema \
-  -f 'properties[][property_name]=system_category' \
-  -f 'properties[][value_type]=single_select' \
-  -f 'properties[][required]=false' \
-  -f 'properties[][default_value]=none' \
-  -f 'properties[][description]=Inspection bucket and validation rigour for this repo. Specific regulations live in .compliance.yml.' \
-  -f 'properties[][allowed_values][]=none' \
-  -f 'properties[][allowed_values][]=critical-trial' \
-  -f 'properties[][allowed_values][]=trial-governance' \
-  -f 'properties[][allowed_values][]=personal-data'
+gh api -X PATCH /orgs/CCTC-team/properties/schema --input - <<'JSON'
+{
+  "properties": [
+    {
+      "property_name": "system_category",
+      "value_type": "single_select",
+      "required": false,
+      "default_value": "none",
+      "description": "Inspection bucket and validation rigour for this repo. Specific regulations live in .compliance.yml.",
+      "allowed_values": ["none", "critical-trial", "trial-governance", "personal-data"]
+    }
+  ]
+}
+JSON
 ```
 
-Then set the property on each regulated repo:
+Verify:
 
 ```bash
-gh api -X PATCH /orgs/CCTC-team/properties/values \
-  -f 'repository_names[]=some-regulated-repo' \
-  -f 'properties[][property_name]=system_category' \
-  -f 'properties[][value]=critical-trial'
+gh api /orgs/CCTC-team/properties/schema \
+  --jq '.[] | select(.property_name == "system_category")'
+```
+
+Then set the property on each regulated repo (same JSON-via-stdin pattern):
+
+```bash
+gh api -X PATCH /orgs/CCTC-team/properties/values --input - <<'JSON'
+{
+  "repository_names": ["some-regulated-repo"],
+  "properties": [
+    { "property_name": "system_category", "value": "critical-trial" }
+  ]
+}
+JSON
+```
+
+For a batch, list multiple repos in `repository_names` — every named repo
+gets the same value:
+
+```bash
+gh api -X PATCH /orgs/CCTC-team/properties/values --input - <<'JSON'
+{
+  "repository_names": ["repo-a", "repo-b", "repo-c"],
+  "properties": [
+    { "property_name": "system_category", "value": "critical-trial" }
+  ]
+}
+JSON
 ```
 
 ### Per-repo opt-in (or just set the property and let drift do it)
