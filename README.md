@@ -259,19 +259,20 @@ Scoped via `conditions.repository_property` on `system_category`.
 | `personal-data` | Require PR; require 1+ approving review. Bypass limited to a single named break-glass identity. | UK-GDPR Art 5(1)(f), DPA 2018 |
 | `none` | Baseline only. Direct push to `main` still allowed. | No regulatory driver |
 
-### Operational consequences before the category rulesets go live
+### Preconditions before the category rulesets go live
 
-- `critical-trial` repos need a **named approver other than the developer**
-  — the four-eyes rule cannot be satisfied by a single person, and
-  bypass actors are not on the table for this category. This is an
-  organisational gap to close before applying the `critical-trial`
-  ruleset, not a technical one.
-- Every contributor (and the drift App identity) must have **commit
-  signing** configured before signed-commits enforcement is turned on.
-  GitHub Apps that commit via the Contents API are signed by the
-  platform; Git CLI pushes from runners need GPG/SSH setup.
-- Required status checks are per-repo (workflow names vary) and will
-  be added per repo as CI lands, not via a single org ruleset.
+- **Named approver other than the developer for `critical-trial` repos.**
+  ICH E6(R3) §3.16 four-eyes review cannot be satisfied by a single
+  person, and bypass actors are not on the table for this category. This
+  is an organisational gap to close (CCTC operations, not this repo)
+  before applying the `critical-trial` ruleset.
+- **Commit signing for everyone pushing to regulated repos.** Required
+  before signed-commits enforcement is turned on. GitHub Apps committing
+  via the Contents API are signed by the platform; Git CLI pushes from
+  runners and developer machines need GPG/SSH setup.
+- **Required status checks are per-repo**, not org-wide. Workflow names
+  vary, so these are added repo by repo as CI lands rather than via the
+  category ruleset.
 
 ## Things still to do
 
@@ -290,16 +291,11 @@ Scoped via `conditions.repository_property` on `system_category`.
 - [x] Apply the baseline org Ruleset (force-push + deletion blocked on
       `main` and `develop` across all repos, no bypass actors)
 - [ ] Define category-specific org Rulesets keyed on `system_category`
-      (one per non-`none` value — see "Branch protection strategy" below).
-      Depends on the next two items because `critical-trial` rules require
-      signed commits from the drift bot and may push regulated-repo
-      scaffolding through the protected flow.
+      (one per non-`none` value — see "Branch protection strategy" above
+      for preconditions, notably the `critical-trial` reviewer gap)
 - [ ] Provision the `CCTC Compliance Drift` GitHub App and add the secrets
       `ORG_COMPLIANCE_DRIFT_APP_ID` / `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY`
       (drift workflow will then scaffold tagged repos on next run)
-- [ ] Stand up a named "regulatory reviewer" for `critical-trial` repos so
-      four-eyes review under ICH E6(R3) §3.16 can actually happen
-      (segregation of duties — the developer cannot also approve)
 
 ## Deliberately not done
 

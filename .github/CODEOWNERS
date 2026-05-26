@@ -2,8 +2,6 @@
 #
 # Owners listed here are automatically requested for review when matching
 # files are changed. Order matters: the last matching pattern wins.
-#
-# TODO: replace @CCTC-team/CCTC-team-maintainers with the real team handle(s).
 
 *                                @CCTC-team/CCTC-team-maintainers
 
