@@ -250,13 +250,17 @@ regulatory bucket decides the rules — not a parallel classification.
 No bypass actors. Universal — accidents nobody should be able to commit
 to muscle-memory, regulated or not.
 
-### Category-specific (planned)
+### Category-specific
 
 Scoped via `conditions.repository_property` on `system_category`. Two
 rulesets rather than three — `trial-governance` and `personal-data`
 share enough that splitting them adds maintenance without adding
 controls, while `critical-trial` carries hard regulatory hooks
 (segregation of duties, zero bypass) the others don't.
+
+**Status:** Ruleset B (`cctc-regulated-non-critical`) is live as of
+2026-05-26 (org ruleset id `16889857`). Ruleset A
+(`cctc-critical-trial`) remains pending — see preconditions below.
 
 #### Ruleset A — `cctc-critical-trial`
 
@@ -293,9 +297,14 @@ ruleset doesn't re-assert them).
 | Dismiss stale reviews on push | enabled | Cheap uplift over a bare PR-required rule, no regulatory downside |
 | Signed commits | required | UK-GDPR Art 5(1)(f) integrity; ALCOA+ attributability applies across all regulated categories, not just `critical-trial` ([rationale](docs/alcoa-sdlc-rationale.md)) |
 
-**Bypass:** a single named break-glass identity — a specific org-admin
-user account, not a team, so audit-log attribution is unambiguous. Every
-use is followed by an incident record. Baseline rules carry over.
+**Bypass:** `actor_type: OrganizationAdmin` with `bypass_mode: always`.
+GitHub's API rejects `actor_type: "User"` for org-level rulesets
+(despite the REST docs listing it as supported), so a specific named
+user cannot be the bypass actor at this scope. The cleaner long-term
+option is a one-person Team — switch to that once headcount makes the
+broader `OrganizationAdmin` bypass too loose. Every bypass event is
+captured in the org audit log; an incident record should accompany
+each one. Baseline rules carry over.
 
 #### `none`
 
@@ -320,20 +329,21 @@ driver.
   category. Organisational gap to close (CCTC operations, not this
   repo) before applying the ruleset.
 
-**Specific to Ruleset B (`cctc-regulated-non-critical`):**
-
-- **Named break-glass identity** chosen and documented — a specific
-  user account, not a team, so audit-log attribution is unambiguous.
+**Specific to Ruleset B (`cctc-regulated-non-critical`):** *(none
+remaining — applied 2026-05-26)*. Originally listed naming a single
+break-glass user; downgraded to `OrganizationAdmin` after the GitHub
+API rejected `actor_type: User` for org-level rulesets. Revisit
+(switch to a one-person Team) when CCTC has more than one org admin.
 
 **Out of scope for either ruleset:**
 
 - **Required status checks** are per-repo, not org-wide. Workflow
   names vary, so these are added repo by repo as CI lands.
 
-Realistic rollout sequence: commit signing rolled out → Ruleset B
-goes live as soon as the break-glass identity is named → Ruleset A
-goes live once the reviewer-gap is closed for each `critical-trial`
-repo.
+Rollout sequence followed: commit signing set up for rmh54
+(2026-05-26) → Ruleset B applied with `OrganizationAdmin` bypass the
+same day. Ruleset A remains pending the reviewer-gap closure for
+each `critical-trial` repo.
 
 ### Applying the category rulesets
 
@@ -341,21 +351,21 @@ The two JSON definitions in `rulesets/` are committed in their
 final-state form. Each is applied with one `gh api` call by an org
 admin once the relevant preconditions are met.
 
-Before applying Ruleset B, populate `bypass_actors` with the chosen
-break-glass identity. Look up the numeric user ID:
+For Ruleset B's `bypass_actors`, GitHub's API rejects
+`actor_type: "User"` at the org level (it is only valid in
+repository-scoped rulesets). The two viable options at org scope are:
 
-```bash
-gh api /users/<break-glass-username> --jq .id
-```
+- `OrganizationAdmin` — bypass granted to anyone with the org-admin
+  role. `actor_id` is ignored, pass `null`. Simplest, used today.
+- `Team` — bypass granted to members of a named team. Cleaner when
+  more than one person holds the admin role and you want a specific
+  named break-glass:
 
-Then edit `rulesets/cctc-regulated-non-critical.json` so the array
-reads:
+  ```bash
+  gh api /orgs/CCTC-team/teams/<team-slug> --jq .id
+  ```
 
-```json
-"bypass_actors": [
-  { "actor_id": <id-from-above>, "actor_type": "User", "bypass_mode": "always" }
-]
-```
+  Then set `{ "actor_id": <team-id>, "actor_type": "Team", "bypass_mode": "always" }`.
 
 Apply with:
 
@@ -407,17 +417,11 @@ query above.
       each one
 - [x] Apply the baseline org Ruleset (force-push + deletion blocked on
       `main` and `develop` across all repos, no bypass actors)
-- [ ] Roll out universal commit signing to every developer pushing to
-      regulated repos (each person completes
-      `docs/commit-signing-setup.md` and has at least one Verified
-      commit on their record)
-- [ ] Apply org Ruleset `cctc-regulated-non-critical` in
-      `enforcement: "evaluate"` initially if more than one developer is
-      pushing — gives a log-only view of unsigned violations without
-      blocking anyone; flip to `active` once the rollout list above is
-      cleared. Single-developer estates can skip evaluate mode and
-      apply active directly. JSON at
-      `rulesets/cctc-regulated-non-critical.json`.
+- [x] Roll out universal commit signing — rmh54 set up 2026-05-26
+      with SSH signing (sole pusher to regulated repos today; re-open
+      this item when adding a second developer)
+- [x] Apply org Ruleset `cctc-regulated-non-critical` (live as id
+      `16889857`, `enforcement: active`, `OrganizationAdmin` bypass)
 - [ ] Apply org Ruleset `cctc-critical-trial` (JSON drafted at
       `rulesets/cctc-critical-trial.json`; same evaluate-then-active
       pattern; additionally blocked on closing the non-developer-
