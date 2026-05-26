@@ -249,30 +249,81 @@ to muscle-memory, regulated or not.
 
 ### Category-specific (planned)
 
-To be applied once the drift App is provisioned and signing is settled.
-Scoped via `conditions.repository_property` on `system_category`.
+Scoped via `conditions.repository_property` on `system_category`. Two
+rulesets rather than three — `trial-governance` and `personal-data`
+share enough that splitting them adds maintenance without adding
+controls, while `critical-trial` carries hard regulatory hooks
+(segregation of duties, zero bypass) the others don't.
 
-| Category | Additional rules | Driver |
+#### Ruleset A — `cctc-critical-trial`
+
+Scoped to repos with `system_category == critical-trial`. Targets
+`main`, `develop`, and `release/*`.
+
+| Rule | Setting | Driver |
 | --- | --- | --- |
-| `critical-trial` | Require PR; require 1+ approving review from someone other than the last pusher; dismiss stale reviews on push; require signed commits; require linear history; require status checks once CI is in place. **Zero bypass actors.** | ICH E6(R3) §3.16 (segregation of duties), MHRA CSV-for-GCP, Part 11 §11.10(d)(e), ALCOA+ attributability |
-| `trial-governance` | Require PR; require 1+ approving review; dismiss stale reviews. Signed commits desirable. Bypass limited to a single named break-glass identity with logged justification. | System validation, document retention; integrity matters but no patient-data nexus |
-| `personal-data` | Require PR; require 1+ approving review. Bypass limited to a single named break-glass identity. | UK-GDPR Art 5(1)(f), DPA 2018 |
-| `none` | Baseline only. Direct push to `main` still allowed. | No regulatory driver |
+| Require PR | 1+ approving review | ICH E6(R3) §3.16 |
+| Approver ≠ last pusher | `require_last_push_approval: true` | Segregation of duties |
+| Dismiss stale reviews on push | enabled | Approval reflects the final code, not an earlier version |
+| Code owner review | enabled (no-op if CODEOWNERS is empty) | Routes review to the responsible party as CODEOWNERS is populated |
+| Signed commits | required | Part 11 §11.10(d)(e), ALCOA+ attributability |
+| Linear history | required | Clean audit trail; merge commits obscure who approved what |
+| Required status checks | per-repo, not org-wide | Workflow names vary; added repo by repo as CI lands |
+
+**Zero bypass actors.** Baseline rules (force-push, deletion blocked)
+carry over.
+
+#### Ruleset B — `cctc-regulated-non-critical`
+
+Scoped to repos with `system_category in [trial-governance, personal-data]`.
+Targets `main`, `develop`.
+
+| Rule | Setting | Driver |
+| --- | --- | --- |
+| Require PR | 1+ approving review | System validation (`trial-governance`); UK-GDPR Art 5(1)(f) integrity (`personal-data`) |
+| Dismiss stale reviews on push | enabled | Cheap uplift over a bare PR-required rule, no regulatory downside |
+| Signed commits | required | UK-GDPR Art 5(1)(f) integrity; ALCOA+ attributability applies across all regulated categories, not just `critical-trial` |
+
+**Bypass:** a single named break-glass identity — a specific org-admin
+user account, not a team, so audit-log attribution is unambiguous. Every
+use is followed by an incident record. Baseline rules carry over.
+
+#### `none`
+
+Baseline only. Direct push to `main` still allowed. No regulatory
+driver.
 
 ### Preconditions before the category rulesets go live
 
-- **Named approver other than the developer for `critical-trial` repos.**
-  ICH E6(R3) §3.16 four-eyes review cannot be satisfied by a single
-  person, and bypass actors are not on the table for this category. This
-  is an organisational gap to close (CCTC operations, not this repo)
-  before applying the `critical-trial` ruleset.
-- **Commit signing for everyone pushing to regulated repos.** Required
-  before signed-commits enforcement is turned on. GitHub Apps committing
-  via the Contents API are signed by the platform; Git CLI pushes from
-  runners and developer machines need GPG/SSH setup.
-- **Required status checks are per-repo**, not org-wide. Workflow names
-  vary, so these are added repo by repo as CI lands rather than via the
-  category ruleset.
+**Shared (block both rulesets):**
+
+- **Universal commit signing for everyone pushing to regulated repos.**
+  GitHub Apps committing via the Contents API are signed by the
+  platform; Git CLI pushes from runners and developer machines need
+  GPG/SSH setup.
+
+**Specific to Ruleset A (`cctc-critical-trial`):**
+
+- **Named approver other than the developer for each `critical-trial`
+  repo.** ICH E6(R3) §3.16 four-eyes review cannot be satisfied by a
+  single person, and bypass actors are not on the table for this
+  category. Organisational gap to close (CCTC operations, not this
+  repo) before applying the ruleset.
+
+**Specific to Ruleset B (`cctc-regulated-non-critical`):**
+
+- **Named break-glass identity** chosen and documented — a specific
+  user account, not a team, so audit-log attribution is unambiguous.
+
+**Out of scope for either ruleset:**
+
+- **Required status checks** are per-repo, not org-wide. Workflow
+  names vary, so these are added repo by repo as CI lands.
+
+Realistic rollout sequence: commit signing rolled out → Ruleset B
+goes live as soon as the break-glass identity is named → Ruleset A
+goes live once the reviewer-gap is closed for each `critical-trial`
+repo.
 
 ## Things still to do
 
@@ -290,9 +341,17 @@ Scoped via `conditions.repository_property` on `system_category`.
       each one
 - [x] Apply the baseline org Ruleset (force-push + deletion blocked on
       `main` and `develop` across all repos, no bypass actors)
-- [ ] Define category-specific org Rulesets keyed on `system_category`
-      (one per non-`none` value — see "Branch protection strategy" above
-      for preconditions, notably the `critical-trial` reviewer gap)
+- [ ] Roll out universal commit signing for everyone pushing to
+      regulated repos (shared precondition for both category rulesets)
+- [ ] Define org Ruleset `cctc-regulated-non-critical` (PR + 1 review +
+      dismiss-stale + signed commits, scoped to `system_category in
+      [trial-governance, personal-data]`, single named break-glass
+      bypass)
+- [ ] Define org Ruleset `cctc-critical-trial` (Ruleset B rules plus
+      approver ≠ last pusher, linear history, code-owner review;
+      scoped to `system_category == critical-trial`; zero bypass
+      actors). Blocked on closing the non-developer-approver gap for
+      each `critical-trial` repo.
 - [ ] Provision the `CCTC Compliance Drift` GitHub App and add the secrets
       `ORG_COMPLIANCE_DRIFT_APP_ID` / `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY`
       (drift workflow will then scaffold tagged repos on next run)
