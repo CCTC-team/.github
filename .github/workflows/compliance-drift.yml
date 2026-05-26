@@ -1,0 +1,67 @@
+name: Compliance scaffold drift check
+
+# Nightly audit: finds every org repo with the `system_category` custom
+# property set to anything other than `none`, and ensures each one has:
+#
+#   - .github/compliance.schema.json identical to the canonical copy
+#   - .github/workflows/compliance.yml caller workflow
+#   - .compliance.yml at repo root (stubbed with today's date if missing)
+#   - README.md carrying the <!-- compliance:banner --> marker
+#   - CONTRIBUTING-regulated.md identical to the canonical copy
+#
+# Drift is corrected by opening a PR against the affected repo. The PR
+# history IS the audit-trail evidence — do not squash-merge without keeping
+# a record of who approved each restoration.
+
+on:
+  schedule:
+    - cron: "37 4 * * *"
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: "Space-separated repos to check (empty = all regulated repos)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Report drift but don't open PRs"
+        type: boolean
+        default: false
+
+jobs:
+  drift:
+    runs-on: [self-hosted, linux, cctc]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify required CLIs are present
+        run: |
+          command -v gh   >/dev/null || { echo "gh not found";   exit 1; }
+          command -v jq   >/dev/null || { echo "jq not found";   exit 1; }
+          command -v git  >/dev/null || { echo "git not found";  exit 1; }
+
+      # Requires an App installed across the org with:
+      #   - Contents: read & write       (commit drift fixes)
+      #   - Pull requests: read & write  (open the drift PR)
+      #   - Metadata: read               (always required)
+      #   - Custom properties: read      (list properties/values)
+      #
+      # The existing ORG_LABEL_SYNC_APP has Issues:write only and is NOT
+      # sufficient — provision a second App (ORG_COMPLIANCE_DRIFT_APP) or
+      # expand the existing one. See README.md for setup notes.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ORG_COMPLIANCE_DRIFT_APP_ID }}
+          private-key: ${{ secrets.ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY }}
+          owner: CCTC-team
+
+      - name: Run drift check
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORG: CCTC-team
+          DRY_RUN: ${{ inputs.dry_run }}
+          REPOS: ${{ inputs.repos }}
+        run: ./scripts/compliance-drift.sh

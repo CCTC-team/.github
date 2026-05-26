@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=./.github/compliance.schema.json
+#
+# Compliance metadata for this repository.
+# Canonical schema: CCTC-team/.github/compliance.schema.json
+# Auto-stubbed by the compliance-drift workflow. Review every TODO before
+# merging — the stub assumes a UK academic CTU EDC posture (critical-trial,
+# GAMP 5, no FDA/EMA submission, no EU sites, no clinical decisions).
+
+schema_version: 1
+
+# Must match the `system_category` org custom property set on this repo.
+# - critical-trial    — captures, transforms, or validates trial data
+# - trial-governance  — trial metadata, no patient data (eTMF, CTMS, QMS)
+# - personal-data     — personal data, no trial nexus
+# - none              — pure infrastructure (this file shouldn't exist)
+system_category: critical-trial
+
+# GAMP 5 software category:
+#   3 = off-the-shelf, unconfigured
+#   4 = configured off-the-shelf (e.g. RAVE/REDCap as deployed)
+#   5 = custom code (most CCTC repos)
+gamp_category: 5
+
+# UK Clinical Trials Regulations require 25-year retention for trial records.
+retention_years: 25
+
+# Regulatory pillars — clusters of related regulations. The granular
+# citation register lives in the CTU's QMS / SOPs. Mark each pillar
+# considered, including the ones you ruled out: an inspector wants to see
+# that you thought about international submission and (correctly) said no,
+# not that you silently omitted it.
+regulatory_pillars:
+  - pillar: uk-statutory
+    status: in-scope
+    notes: TODO — describe the trial activity. Bundles UK CT Regs 2004 (as amended by SI 2025/538), UK-GDPR, DPA 2018, NHS-DSPT, HRA Transparency. Add CAG-S251 detail here if processing unconsented PID.
+
+  - pillar: mhra-csv-di
+    status: in-scope
+    notes: ICH E6 (R3), MHRA GxP-DI, MHRA CSV-for-GCP. Standard for any critical-trial system.
+
+  - pillar: infra-security
+    status: in-scope
+    notes: TODO — confirm the hosting environment's Cyber Essentials Plus / ISO 27001 posture.
+
+  - pillar: international-ehr-standards
+    status: out-of-scope
+    notes: UK-only academic trial — no FDA or EMA submission planned. Revisit if the sponsor or destination changes.
+
+  - pillar: eu-ct-regulation
+    status: out-of-scope
+    notes: No EU sites. Revisit if cross-border recruitment is added.
+
+  - pillar: samd-aimd
+    status: out-of-scope
+    notes: System captures and stores trial data; does not make or guide clinical decisions.
+
+# Inspector-readiness fields (required for critical-trial). These answer
+# the questions an MHRA inspector actually asks. Fill them in honestly —
+# they're a contract with the inspector, not marketing.
+audit_trail_kind: extractable        # extractable | read-only | append-only | none
+account_model: named                 # named | named-with-roles | shared | mixed
+pid_boundary: separated              # separated | commingled | none
+csv_evidence: TODO-url-to-CSV-pack   # URL or repo path to URS/FS/IQ/OQ/PQ + risk assessment
+
+requirements:
+  audit_trail: required
+  electronic_signatures: required
+  validation_documentation: required
+  change_control: formal
+  access_review_frequency: quarterly
+
+contacts:
+  qa_lead: TODO@cctc-team
+  data_protection_officer: TODO@cctc-team
+
+last_reviewed: "2026-05-26"      # Drift workflow templates this to today's date when it creates the stub.
+review_cadence_months: 6

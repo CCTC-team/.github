@@ -1,0 +1,11 @@
+name: Compliance check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  compliance:
+    uses: CCTC-team/.github/.github/workflows/compliance-check.yml@main
