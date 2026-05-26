@@ -27,6 +27,7 @@ This repo is private, so the defaults only flow into other **private** repos.
 | `rulesets/` | JSON definitions of the planned org-level category rulesets (applied via `gh api`) |
 | `docs/alcoa-sdlc-rationale.md` | Why signed commits are required across all regulated rulesets (inspector-facing) |
 | `docs/commit-signing-setup.md` | Developer-facing setup guide (SSH/GPG, runners, verification) |
+| `docs/compliance-drift-app-setup.md` | Runbook for provisioning the `CCTC Compliance Drift` GitHub App |
 
 ## How inheritance works (and doesn't)
 
@@ -233,6 +234,10 @@ sufficient**. Either provision a separate App or expand the existing one
 — a separate App is cleaner because the scopes differ materially and you
 may want to revoke one without the other.
 
+Step-by-step provisioning instructions (web-UI walk-through,
+permissions table, smoke test, rotation) live in
+[`docs/compliance-drift-app-setup.md`](docs/compliance-drift-app-setup.md).
+
 ## Branch protection strategy
 
 Branch protection is enforced via **org-level Rulesets** rather than
@@ -434,7 +439,8 @@ query above.
       approver gap for each `critical-trial` repo)
 - [ ] Provision the `CCTC Compliance Drift` GitHub App and add the secrets
       `ORG_COMPLIANCE_DRIFT_APP_ID` / `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY`
-      (drift workflow will then scaffold tagged repos on next run)
+      (drift workflow will then scaffold tagged repos on next run).
+      Step-by-step in [`docs/compliance-drift-app-setup.md`](docs/compliance-drift-app-setup.md).
 
 ## Deliberately not done
 
