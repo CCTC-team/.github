@@ -78,12 +78,12 @@ settings page — you'll need it for the secret in step 4.
 ```bash
 # App ID — pass the number you noted in step 1
 gh secret set ORG_COMPLIANCE_DRIFT_APP_ID \
-  --org CCTC-team --visibility all \
+  --org CCTC-team --visibility private \
   --body "<the-numeric-app-id>"
 
 # Private key — feed the .pem file directly so newlines are preserved
 gh secret set ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY \
-  --org CCTC-team --visibility all \
+  --org CCTC-team --visibility private \
   --body "$(cat /path/to/cctc-compliance-drift.<date>.private-key.pem)"
 ```
 

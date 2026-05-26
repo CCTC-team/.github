@@ -437,10 +437,17 @@ query above.
       `rulesets/cctc-critical-trial.json`; same evaluate-then-active
       pattern; additionally blocked on closing the non-developer-
       approver gap for each `critical-trial` repo)
-- [ ] Provision the `CCTC Compliance Drift` GitHub App and add the secrets
-      `ORG_COMPLIANCE_DRIFT_APP_ID` / `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY`
-      (drift workflow will then scaffold tagged repos on next run).
-      Step-by-step in [`docs/compliance-drift-app-setup.md`](docs/compliance-drift-app-setup.md).
+- [x] Provision the `CCTC Compliance Drift` GitHub App (App ID
+      `3874883`) with `ORG_COMPLIANCE_DRIFT_APP_ID` /
+      `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY` org secrets (visibility
+      `PRIVATE`), installed on all CCTC-team repos. Dry-run smoke
+      test on 2026-05-26 saw 15 regulated repos and detected the
+      expected `CONTRIBUTING-regulated.md` drift caused by the
+      signed-commits sub-bullet added earlier in this session.
+- [ ] Bump `actions/create-github-app-token` from `@v1` to `@v2` in
+      `sync-labels.yml` and `compliance-drift.yml` before Node.js 20
+      is removed from runners on 2026-09-16 (warning surfaced during
+      the drift App smoke test).
 
 ## Deliberately not done
 
