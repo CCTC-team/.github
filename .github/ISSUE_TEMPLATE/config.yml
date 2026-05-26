@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/CCTC-team/.github/security/advisories/new
+    about: Please report security issues privately, not as public issues.
+  - name: Support question
+    url: mailto:cuh.cctu-ct-prog@nhs.net
+    about: For help using a system rather than reporting a defect.

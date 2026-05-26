@@ -1,0 +1,14 @@
+[
+  { "name": "bug",                "color": "d73a4a", "description": "Defect in existing functionality" },
+  { "name": "enhancement",        "color": "a2eeef", "description": "New feature or improvement request" },
+  { "name": "severity: critical", "color": "b60205", "description": "System unusable / patient safety" },
+  { "name": "severity: high",     "color": "d93f0b", "description": "Major function broken" },
+  { "name": "severity: medium",   "color": "fbca04", "description": "Workaround available" },
+  { "name": "severity: low",      "color": "0e8a16", "description": "Cosmetic or minor" },
+  { "name": "triage",             "color": "ededed", "description": "Needs initial review" },
+  { "name": "blocked",            "color": "000000", "description": "Cannot proceed" },
+  { "name": "security",           "color": "b60205", "description": "Security-related" },
+  { "name": "compliance",         "color": "5319e7", "description": "GDPR / regulatory" },
+  { "name": "good first issue",   "color": "7057ff", "description": "Suitable for newcomers" },
+  { "name": "deferred",           "color": "c5def5", "description": "Logged for future consideration (feature freeze)" }
+]

@@ -1,0 +1,20 @@
+# CODEOWNERS for the org-level .github repository.
+#
+# Owners listed here are automatically requested for review when matching
+# files are changed. Order matters: the last matching pattern wins.
+#
+# TODO: replace @CCTC-team/CCTC-team-maintainers with the real team handle(s).
+
+*                                @CCTC-team/CCTC-team-maintainers
+
+# Issue templates and PR template — governance change, wider review
+/.github/ISSUE_TEMPLATE/         @CCTC-team/CCTC-team-maintainers
+/.github/pull_request_template.md @CCTC-team/CCTC-team-maintainers
+
+# Security policy — security team must approve changes
+/SECURITY.md                     @CCTC-team/CCTC-team-maintainers
+
+# Label manifest and sync workflow — affects every repo in the org
+/labels.json                     @CCTC-team/CCTC-team-maintainers
+/.github/workflows/              @CCTC-team/CCTC-team-maintainers
+/scripts/                        @CCTC-team/CCTC-team-maintainers

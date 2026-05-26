@@ -1,0 +1,53 @@
+name: Feature Request
+description: Suggest a new capability (subject to feature-freeze policy during alpha/beta)
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests are logged for monthly review. During active alpha/beta
+        testing phases, new features are deferred until validation is complete.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: users
+    attributes:
+      label: Users affected
+      multiple: true
+      options:
+        - All users
+        - Admins
+        - Trial Admins
+        - Sponsor/Site users
+        - Public users
+        - Clinicians
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested priority
+      options:
+        - Critical (compliance / system unusable without it)
+        - High (significant productivity impact)
+        - Medium (would improve workflow)
+        - Low (nice to have)
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Can this be solved without development (process, training, docs)?
