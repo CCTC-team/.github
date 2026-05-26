@@ -24,6 +24,9 @@ This repo is private, so the defaults only flow into other **private** repos.
 | `.github/workflows/compliance-check.yml` | Reusable workflow regulated repos opt into |
 | `.github/workflows/compliance-drift.yml` | Nightly drift correction across regulated repos |
 | `scripts/compliance-drift.sh` | Drift-detection logic invoked by the workflow |
+| `rulesets/` | JSON definitions of the planned org-level category rulesets (applied via `gh api`) |
+| `docs/alcoa-sdlc-rationale.md` | Why signed commits are required across all regulated rulesets (inspector-facing) |
+| `docs/commit-signing-setup.md` | Developer-facing setup guide (SSH/GPG, runners, verification) |
 
 ## How inheritance works (and doesn't)
 
@@ -257,8 +260,11 @@ controls, while `critical-trial` carries hard regulatory hooks
 
 #### Ruleset A — `cctc-critical-trial`
 
+Defined in [`rulesets/cctc-critical-trial.json`](rulesets/cctc-critical-trial.json).
 Scoped to repos with `system_category == critical-trial`. Targets
-`main`, `develop`, and `release/*`.
+`main`, `develop`, and `release/*` (the JSON also re-asserts
+`non_fast_forward` and `deletion` so `release/*` branches inherit the
+same safety floor as `main`/`develop`).
 
 | Rule | Setting | Driver |
 | --- | --- | --- |
@@ -275,8 +281,11 @@ carry over.
 
 #### Ruleset B — `cctc-regulated-non-critical`
 
+Defined in [`rulesets/cctc-regulated-non-critical.json`](rulesets/cctc-regulated-non-critical.json).
 Scoped to repos with `system_category in [trial-governance, personal-data]`.
-Targets `main`, `develop`.
+Targets `main`, `develop` (the baseline ruleset already covers
+`non_fast_forward` and `deletion` on the same branches, so this
+ruleset doesn't re-assert them).
 
 | Rule | Setting | Driver |
 | --- | --- | --- |
@@ -300,7 +309,8 @@ driver.
 - **Universal commit signing for everyone pushing to regulated repos.**
   GitHub Apps committing via the Contents API are signed by the
   platform; Git CLI pushes from runners and developer machines need
-  GPG/SSH setup.
+  GPG/SSH setup. Developer-facing instructions live in
+  [`docs/commit-signing-setup.md`](docs/commit-signing-setup.md).
 
 **Specific to Ruleset A (`cctc-critical-trial`):**
 
@@ -325,6 +335,52 @@ goes live as soon as the break-glass identity is named → Ruleset A
 goes live once the reviewer-gap is closed for each `critical-trial`
 repo.
 
+### Applying the category rulesets
+
+The two JSON definitions in `rulesets/` are committed in their
+final-state form. Each is applied with one `gh api` call by an org
+admin once the relevant preconditions are met.
+
+Before applying Ruleset B, populate `bypass_actors` with the chosen
+break-glass identity. Look up the numeric user ID:
+
+```bash
+gh api /users/<break-glass-username> --jq .id
+```
+
+Then edit `rulesets/cctc-regulated-non-critical.json` so the array
+reads:
+
+```json
+"bypass_actors": [
+  { "actor_id": <id-from-above>, "actor_type": "User", "bypass_mode": "always" }
+]
+```
+
+Apply with:
+
+```bash
+# Dry-run first (set enforcement: "evaluate" temporarily in the JSON
+# to log what would have been blocked without blocking it)
+
+gh api -X POST /orgs/CCTC-team/rulesets \
+  --input rulesets/cctc-regulated-non-critical.json
+
+gh api -X POST /orgs/CCTC-team/rulesets \
+  --input rulesets/cctc-critical-trial.json
+```
+
+Verify either ruleset is live:
+
+```bash
+gh api /orgs/CCTC-team/rulesets \
+  --jq '.[] | select(.name == "cctc-critical-trial")'
+```
+
+Updating a ruleset later uses `PUT /orgs/CCTC-team/rulesets/{id}`
+with the same JSON payload; the `id` comes from the verification
+query above.
+
 ## Things still to do
 
 - [x] Replace the support email placeholder in `.github/ISSUE_TEMPLATE/config.yml`
@@ -342,16 +398,16 @@ repo.
 - [x] Apply the baseline org Ruleset (force-push + deletion blocked on
       `main` and `develop` across all repos, no bypass actors)
 - [ ] Roll out universal commit signing for everyone pushing to
-      regulated repos (shared precondition for both category rulesets)
-- [ ] Define org Ruleset `cctc-regulated-non-critical` (PR + 1 review +
-      dismiss-stale + signed commits, scoped to `system_category in
-      [trial-governance, personal-data]`, single named break-glass
-      bypass)
-- [ ] Define org Ruleset `cctc-critical-trial` (Ruleset B rules plus
-      approver ≠ last pusher, linear history, code-owner review;
-      scoped to `system_category == critical-trial`; zero bypass
-      actors). Blocked on closing the non-developer-approver gap for
-      each `critical-trial` repo.
+      regulated repos (shared precondition for both category rulesets;
+      see `docs/commit-signing-setup.md`)
+- [ ] Apply org Ruleset `cctc-regulated-non-critical` (JSON drafted at
+      `rulesets/cctc-regulated-non-critical.json`; blocked on the
+      break-glass identity being named so `bypass_actors` can be
+      populated, and on the universal-signing rollout above)
+- [ ] Apply org Ruleset `cctc-critical-trial` (JSON drafted at
+      `rulesets/cctc-critical-trial.json`; blocked on the
+      universal-signing rollout above and on closing the
+      non-developer-approver gap for each `critical-trial` repo)
 - [ ] Provision the `CCTC Compliance Drift` GitHub App and add the secrets
       `ORG_COMPLIANCE_DRIFT_APP_ID` / `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY`
       (drift workflow will then scaffold tagged repos on next run)

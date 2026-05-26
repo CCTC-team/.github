@@ -13,6 +13,9 @@ Don't quietly route around it.
 1. **No direct pushes to `main`.** Every change goes via PR with at least
    one review from someone other than the author. Force-pushes to `main`
    are blocked by org ruleset.
+   - **Signed commits are required.** First-time setup at
+     [CCTC-team/.github → `docs/commit-signing-setup.md`](https://github.com/CCTC-team/.github/blob/main/docs/commit-signing-setup.md).
+     Unsigned commits will be rejected by the org ruleset.
 2. **PR description must state regulatory impact.** Even "no impact" is
    fine — the inspector wants to see you considered it. Use the PR
    template's "Clinical / compliance checklist".
