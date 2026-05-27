@@ -1,0 +1,59 @@
+name: Sync property topics across org
+
+on:
+  # Re-run when the script or workflow changes
+  push:
+    branches: [main]
+    paths:
+      - scripts/sync-property-topics.sh
+      - .github/workflows/sync-property-topics.yml
+  # Daily drift-correction — picks up property edits made in the GitHub UI
+  schedule:
+    - cron: "23 3 * * *"
+  # Manual run
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: "Space-separated list of repo names to sync (leave empty for all)"
+        required: false
+        default: ""
+
+jobs:
+  sync:
+    runs-on: [self-hosted, linux, cctc]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify required CLIs are present
+        run: |
+          command -v gh >/dev/null || { echo "gh not found on runner image"; exit 1; }
+          command -v jq >/dev/null || { echo "jq not found on runner image"; exit 1; }
+
+      # Mint a short-lived installation token for the org-installed GitHub App.
+      # Requires two org secrets:
+      #   ORG_PROPERTY_SYNC_APP_CLIENT_ID   — the App's Client ID (Iv23li…)
+      #   ORG_PROPERTY_SYNC_APP_PRIVATE_KEY — full contents of the App's .pem private key
+      # The App must be installed across the org with:
+      #   Organization permissions:  Custom properties: Read
+      #   Repository permissions:    Administration: Write   (required to PUT /repos/{}/{}/topics)
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.ORG_PROPERTY_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ORG_PROPERTY_SYNC_APP_PRIVATE_KEY }}
+          owner: CCTC-team
+
+      - name: Sync property topics
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORG: CCTC-team
+          REPOS: ${{ github.event.inputs.repos }}
+        run: |
+          if [ -n "$REPOS" ]; then
+            ./scripts/sync-property-topics.sh $REPOS
+          else
+            ./scripts/sync-property-topics.sh
+          fi
