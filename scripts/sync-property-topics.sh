@@ -33,6 +33,18 @@ if [[ ${#managed[@]} -eq 0 ]]; then
   echo "error: property $PROPERTY has no managed values" >&2
   exit 1
 fi
+# GitHub topic names must match this pattern (lowercase alphanumeric + hyphens,
+# 50 chars max, no leading hyphen). Validate now so a schema change that
+# introduces an invalid value fails loudly instead of silently 422-ing on PUT.
+topic_re='^[a-z0-9][a-z0-9-]{0,49}$'
+for t in "${managed[@]}"; do
+  if ! [[ "$t" =~ $topic_re ]]; then
+    echo "error: property value '$t' is not a valid GitHub topic name (must match $topic_re)." >&2
+    echo "       Sanitise the schema's allowed_values before running sync." >&2
+    exit 1
+  fi
+done
+
 echo "Managed topics: ${managed[*]}"
 
 # Pull property values for every repo in one paginated call.
@@ -73,7 +85,12 @@ echo "$values" | jq -c '.[]' | while read -r row; do
   fi
 
   echo "[$repo] $(echo "$current" | jq -c .) -> $(echo "$new" | jq -c .)"
-  echo "$new" | jq '{names: .}' | gh api -X PUT "/repos/$ORG/$repo/topics" --input - >/dev/null
+  # Capture the API response so non-2xx status surfaces in the log instead of
+  # being silently discarded.
+  if ! response=$(echo "$new" | jq '{names: .}' | gh api -X PUT "/repos/$ORG/$repo/topics" --input - 2>&1); then
+    echo "::error::[$repo] PUT /topics failed: $response" >&2
+    exit 1
+  fi
 done
 
 echo "Done."

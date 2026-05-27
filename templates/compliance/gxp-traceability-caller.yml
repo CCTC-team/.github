@@ -6,6 +6,10 @@ on:
 
 jobs:
   gate:
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
     uses: CCTC-team/.github/.github/workflows/gxp-traceability.yml@main
     with:
       # evaluate → log violations as warnings without blocking merges.
