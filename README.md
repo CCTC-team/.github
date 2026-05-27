@@ -1,7 +1,12 @@
 # .github
 
-Org-level repository for the `CCTC-team` GitHub organisation. The files here
-become defaults for every repo in the org that does not define its own version.
+Org-level engineering configuration for the `CCTC-team` GitHub
+organisation — community health templates, branch-protection policy,
+compliance scaffolding, and label sync. Files here become defaults
+for every repo in the org that does not define its own version.
+
+For an overview of CCTC and the software we publish, see the
+[organisation profile](https://github.com/CCTC-team).
 
 ## What's in here
 
