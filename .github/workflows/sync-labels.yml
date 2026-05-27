@@ -52,9 +52,10 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ORG: CCTC-team
+          REPOS: ${{ github.event.inputs.repos }}
         run: |
-          if [ -n "${{ github.event.inputs.repos }}" ]; then
-            ./scripts/sync-labels.sh ${{ github.event.inputs.repos }}
+          if [ -n "$REPOS" ]; then
+            ./scripts/sync-labels.sh $REPOS
           else
             ./scripts/sync-labels.sh
           fi
