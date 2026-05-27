@@ -3,8 +3,6 @@
 Org-level repository for the `CCTC-team` GitHub organisation. The files here
 become defaults for every repo in the org that does not define its own version.
 
-This repo is private, so the defaults only flow into other **private** repos.
-
 ## What's in here
 
 | Path | Purpose |
@@ -219,9 +217,9 @@ gh workflow run compliance-drift.yml -f dry_run=true
 gh workflow run compliance-drift.yml -f repos="repo-a repo-b"
 ```
 
-### Required App permissions (TODO before first run)
+### Required App permissions
 
-The drift workflow expects org secrets `ORG_COMPLIANCE_DRIFT_APP_ID` /
+The drift workflow expects org secrets `ORG_COMPLIANCE_DRIFT_APP_CLIENT_ID` /
 `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY` for a GitHub App with:
 
 - Contents: **read & write** (commit drift fixes)
@@ -263,17 +261,6 @@ share enough that splitting them adds maintenance without adding
 controls, while `critical-trial` carries hard regulatory hooks
 (segregation of duties, zero bypass) the others don't.
 
-**Status:** Both category rulesets are deployed as of 2026-05-26 in
-`enforcement: evaluate` (log-only). Violations show up in
-Organization → Settings → Rules → Insights without blocking pushes.
-Flip each to `active` (and update the corresponding JSON in
-`rulesets/` to match) once Insights shows a clean window for it.
-
-| Ruleset | Org id | Mode | Pending flip-to-active condition |
-| --- | --- | --- | --- |
-| `cctc-regulated-non-critical` | `16889857` | evaluate | Clean Insights window |
-| `cctc-critical-trial` | `16892559` | evaluate | Clean Insights window AND a non-developer approver is set up for each `critical-trial` repo (ICH E6(R3) §3.16) — otherwise active mode will block solo-developer merges |
-
 #### Ruleset A — `cctc-critical-trial`
 
 Defined in [`rulesets/cctc-critical-trial.json`](rulesets/cctc-critical-trial.json).
@@ -312,11 +299,11 @@ ruleset doesn't re-assert them).
 **Bypass:** `actor_type: OrganizationAdmin` with `bypass_mode: always`.
 GitHub's API rejects `actor_type: "User"` for org-level rulesets
 (despite the REST docs listing it as supported), so a specific named
-user cannot be the bypass actor at this scope. The cleaner long-term
-option is a one-person Team — switch to that once headcount makes the
-broader `OrganizationAdmin` bypass too loose. Every bypass event is
-captured in the org audit log; an incident record should accompany
-each one. Baseline rules carry over.
+user cannot be the bypass actor at this scope. A one-person Team
+gives a cleaner named break-glass when that's preferable to a
+role-based bypass. Every bypass event is captured in the org audit
+log; an incident record should accompany each one. Baseline rules
+carry over.
 
 #### `none`
 
@@ -335,40 +322,34 @@ driver.
 
 **Specific to Ruleset A (`cctc-critical-trial`):**
 
-- **Named approver other than the developer for each `critical-trial`
-  repo.** ICH E6(R3) §3.16 four-eyes review cannot be satisfied by a
-  single person, and bypass actors are not on the table for this
-  category. Organisational gap to close (CCTC operations, not this
-  repo) before applying the ruleset.
-
-**Specific to Ruleset B (`cctc-regulated-non-critical`):** *(none
-remaining — applied 2026-05-26)*. Originally listed naming a single
-break-glass user; downgraded to `OrganizationAdmin` after the GitHub
-API rejected `actor_type: User` for org-level rulesets. Revisit
-(switch to a one-person Team) when CCTC has more than one org admin.
+- **CODEOWNERS populated in each `critical-trial` repo.** ICH E6(R3)
+  §3.16 four-eyes review requires PRs to route to a qualified second
+  reviewer. Any developer on the regulated estate who is not the PR
+  author satisfies the regulation; the gap is operational, not a
+  staffing shortage. With zero bypass actors on this ruleset and
+  code-owner review enabled, an empty CODEOWNERS file means no PR can
+  merge — so each `critical-trial` repo needs CODEOWNERS populated to
+  a team or reviewer set that excludes the typical PR author. Per-
+  repo task, not org-wide.
 
 **Out of scope for either ruleset:**
 
 - **Required status checks** are per-repo, not org-wide. Workflow
   names vary, so these are added repo by repo as CI lands.
 
-Rollout sequence followed: commit signing set up for rmh54
-(2026-05-26) → Ruleset B applied with `OrganizationAdmin` bypass the
-same day. Ruleset A remains pending the reviewer-gap closure for
-each `critical-trial` repo.
-
 ### Applying the category rulesets
 
-The two JSON definitions in `rulesets/` are committed in their
-final-state form. Each is applied with one `gh api` call by an org
-admin once the relevant preconditions are met.
+Each ruleset is applied with one `gh api` call by an org admin. The
+JSON in `rulesets/` is what gets posted; set `"enforcement"` to
+`"active"` or `"evaluate"` before applying, depending on whether you
+want violations blocked or only logged.
 
 For Ruleset B's `bypass_actors`, GitHub's API rejects
 `actor_type: "User"` at the org level (it is only valid in
 repository-scoped rulesets). The two viable options at org scope are:
 
 - `OrganizationAdmin` — bypass granted to anyone with the org-admin
-  role. `actor_id` is ignored, pass `null`. Simplest, used today.
+  role. `actor_id` is ignored, pass `null`. Simplest.
 - `Team` — bypass granted to members of a named team. Cleaner when
   more than one person holds the admin role and you want a specific
   named break-glass:
@@ -389,20 +370,14 @@ gh api -X POST /orgs/CCTC-team/rulesets \
   --input rulesets/cctc-critical-trial.json
 ```
 
-**Evaluate mode (recommended for multi-developer estates).** GitHub
-Rulesets support a log-only mode that records violations without
-blocking pushes. Before running the apply command above, temporarily
-change `"enforcement": "active"` to `"enforcement": "evaluate"` in
-the JSON. After applying, watch the org's ruleset insights
-(Organization → Settings → Rules → Insights) for a couple of weeks.
-Once the violations stop, change the field back to `"active"` and
-re-apply with `PUT /orgs/CCTC-team/rulesets/{id}`.
+**Evaluate mode.** GitHub Rulesets support a log-only mode that
+records violations without blocking pushes. Set `"enforcement":
+"evaluate"` in the JSON to start in log-only, watch the org's
+ruleset insights (Organization → Settings → Rules → Insights) until
+violations stop, then flip to `"enforcement": "active"` and re-apply
+with `PUT /orgs/CCTC-team/rulesets/{id}`.
 
-Single-developer estates can skip evaluate mode and apply active
-directly — the developer is the only person who could trigger a
-violation, and they can fix their own signing setup quickly if needed.
-
-Verify either ruleset is live:
+List existing rulesets and find one by name:
 
 ```bash
 gh api /orgs/CCTC-team/rulesets \
@@ -410,57 +385,7 @@ gh api /orgs/CCTC-team/rulesets \
 ```
 
 Updating a ruleset later uses `PUT /orgs/CCTC-team/rulesets/{id}`
-with the same JSON payload; the `id` comes from the verification
-query above.
-
-## Things still to do
-
-- [x] Replace the support email placeholder in `.github/ISSUE_TEMPLATE/config.yml`
-- [x] Replace the security email placeholder in `SECURITY.md`
-- [x] Replace `@CCTC-team/maintainers` in `.github/CODEOWNERS` with the real team
-- [x] Create the `CCTC Label Sync` GitHub App (org-owned, Issues: read & write,
-      installed on all repositories) and add the org secrets
-      `ORG_LABEL_SYNC_APP_ID` and `ORG_LABEL_SYNC_APP_PRIVATE_KEY`
-- [x] Audit existing repos for legacy `ISSUE_TEMPLATE.md` files that will
-      override these defaults
-- [x] Create the `system_category` org custom property (see Compliance
-      metadata section)
-- [x] Tag the existing regulated repos by setting `system_category` on
-      each one
-- [x] Apply the baseline org Ruleset (force-push + deletion blocked on
-      `main` and `develop` across all repos, no bypass actors)
-- [x] Roll out universal commit signing — rmh54 set up 2026-05-26
-      with SSH signing (sole pusher to regulated repos today; re-open
-      this item when adding a second developer)
-- [x] Apply org Ruleset `cctc-regulated-non-critical` (live as id
-      `16889857`, `OrganizationAdmin` bypass; currently in
-      `enforcement: evaluate` — flip to `active` after a clean
-      Insights window)
-- [x] Apply org Ruleset `cctc-critical-trial` (live as id `16892559`,
-      zero bypass; currently in `enforcement: evaluate`). Flip to
-      `active` is gated on (a) a clean Insights window and (b) a
-      non-developer approver per `critical-trial` repo so solo-
-      developer merges are no longer the steady state — the ruleset
-      itself is no longer the blocker, the organisational reviewer
-      gap is.
-- [x] Provision the `CCTC Compliance Drift` GitHub App (App ID
-      `3874883`) with `ORG_COMPLIANCE_DRIFT_APP_ID` /
-      `ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY` org secrets (visibility
-      `PRIVATE`), installed on all CCTC-team repos. Dry-run smoke
-      test on 2026-05-26 saw 15 regulated repos and detected the
-      expected `CONTRIBUTING-regulated.md` drift caused by the
-      signed-commits sub-bullet added earlier in this session.
-- [x] Bump `actions/create-github-app-token` from `@v1` to `@v3` in
-      `sync-labels.yml` and `compliance-drift.yml` (latest is v3.2.0;
-      v2 already superseded). Clears the Node 20 deprecation warning
-      seen during the drift App smoke test ahead of the 2026-09-16
-      runner removal.
-- [x] Switch the App-token action input from `app-id` (deprecated in
-      v3) to `client-id`. New secrets `ORG_LABEL_SYNC_APP_CLIENT_ID`
-      and `ORG_COMPLIANCE_DRIFT_APP_CLIENT_ID` set (PRIVATE
-      visibility), workflow `with:` blocks updated, smoke test passed
-      via the sync-labels run on commit `da3fb44`. Orphaned
-      `ORG_*_APP_ID` secrets removed.
+with the same JSON payload; the `id` comes from the list above.
 
 ## Deliberately not done
 

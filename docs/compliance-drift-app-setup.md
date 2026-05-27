@@ -1,16 +1,15 @@
 # Provisioning the `CCTC Compliance Drift` GitHub App
 
-This runbook completes the last open TODO blocking the nightly
-compliance-drift workflow (`.github/workflows/compliance-drift.yml`).
+This runbook is the provisioning record for the GitHub App backing
+the nightly compliance-drift workflow (`.github/workflows/compliance-drift.yml`).
 The workflow needs an installation token for a GitHub App that can
 commit drift fixes and open PRs across every regulated repo in the
 org; this guide creates that App, installs it, and wires up the two
 org secrets the workflow reads.
 
 The parallel here is the existing `CCTC Label Sync` App
-(`ORG_LABEL_SYNC_APP_ID` / `ORG_LABEL_SYNC_APP_PRIVATE_KEY`) — you've
-done this dance once already, so the steps below are terse where they
-duplicate that experience.
+(`ORG_LABEL_SYNC_APP_CLIENT_ID` / `ORG_LABEL_SYNC_APP_PRIVATE_KEY`) —
+the steps below are terse where they duplicate that setup.
 
 ## Why a separate App rather than expanding `CCTC Label Sync`
 
@@ -81,12 +80,12 @@ action's `app-id` input is deprecated in v3.
 ```bash
 # Client ID — pass the Iv23li… string you noted in step 1
 gh secret set ORG_COMPLIANCE_DRIFT_APP_CLIENT_ID \
-  --org CCTC-team --visibility private \
+  --org CCTC-team --visibility selected --repos .github \
   --body "<the-client-id>"
 
 # Private key — feed the .pem file directly so newlines are preserved
 gh secret set ORG_COMPLIANCE_DRIFT_APP_PRIVATE_KEY \
-  --org CCTC-team --visibility private \
+  --org CCTC-team --visibility selected --repos .github \
   --body "$(cat /path/to/cctc-compliance-drift.<date>.private-key.pem)"
 ```
 
@@ -123,8 +122,7 @@ Look for two things in the log:
    what `gh api /orgs/CCTC-team/properties/values --jq '.[] | select(.properties[0].value != "none")'`
    returns).
 
-Once both pass, mark the TODO in `README.md` complete and let the
-nightly schedule (`37 4 * * *`) take over.
+Once both pass, the nightly schedule (`37 4 * * *`) takes over.
 
 ## Rotation
 

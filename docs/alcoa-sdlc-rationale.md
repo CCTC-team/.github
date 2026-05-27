@@ -2,7 +2,7 @@
 
 This note exists to record the regulatory rationale for the
 `required_signatures` rule in both category rulesets defined in
-[../README.md#category-specific-planned](../README.md#category-specific-planned).
+[../README.md#category-specific](../README.md#category-specific).
 It is intended as inspector-facing evidence that the control was
 chosen deliberately, not by reflex.
 

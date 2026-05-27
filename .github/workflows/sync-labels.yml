@@ -21,10 +21,9 @@ on:
 
 jobs:
   sync:
-    # Self-hosted CCTC runner (see infrastructure/runners/README.md in
-    # server-structure). Org credits are exhausted; this is the bridge.
-    # Safe because the .github repo is private — see "Security boundaries"
-    # in the runner README.
+    # Self-hosted CCTC runner. Triggers here are push-to-main, schedule,
+    # and workflow_dispatch — no pull_request trigger — so forks cannot
+    # dispatch arbitrary code onto the runner.
     runs-on: [self-hosted, linux, cctc]
     permissions:
       contents: read
