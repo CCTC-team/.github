@@ -21,10 +21,7 @@ on:
 
 jobs:
   sync:
-    # Self-hosted CCTC runner. Triggers here are push-to-main, schedule,
-    # and workflow_dispatch — no pull_request trigger — so forks cannot
-    # dispatch arbitrary code onto the runner.
-    runs-on: [self-hosted, linux, cctc]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:

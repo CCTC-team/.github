@@ -38,7 +38,7 @@ on:
 
 jobs:
   validate:
-    runs-on: [self-hosted, linux, cctc]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
