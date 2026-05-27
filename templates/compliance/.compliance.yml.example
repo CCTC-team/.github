@@ -6,7 +6,7 @@
 # merging — the stub assumes a UK academic CTU EDC posture (critical-trial,
 # GAMP 5, no FDA/EMA submission, no EU sites, no clinical decisions).
 
-schema_version: 1
+schema_version: 2
 
 # Must match the `system_category` org custom property set on this repo.
 # - critical-trial    — captures, transforms, or validates trial data
@@ -75,3 +75,25 @@ contacts:
 
 last_reviewed: "2026-05-26"      # Drift workflow templates this to today's date when it creates the stub.
 review_cadence_months: 6
+
+# Paths in this repo that constitute the validated state. The traceability
+# gate workflow checks that any PR touching these paths is linked to an
+# issue with non-empty Risk ID and Requirement ID. Omit this field
+# entirely to run the gate in strict mode (every PR gated regardless of
+# what it changes) — strict mode is the safe default until you've thought
+# about your repo's structure.
+#
+# Use gitignore-style globs. Quote any pattern containing spaces.
+validated_paths:
+  - src/**
+  - tests/**
+  - user_requirement_specification/**
+  # - "Feature Tests/**"           # uncomment for REDCap V&V repos
+
+# Paths inside a validated_paths match that are NOT themselves validated
+# artefacts — typically docs, READMEs, or comment-only files. Subtracted
+# from the validated set when the gate decides whether a PR is in scope.
+# Use sparingly and document any addition in the repo's QMS.
+exempt_paths:
+  - "**/README.md"
+  - "**/*.md"                      # remove this line if the URS itself is in markdown

@@ -1,0 +1,250 @@
+name: GxP traceability gate (reusable)
+
+# Reusable workflow enforcing PR-level traceability on changes that touch
+# the validated state. Regulated repos opt in by adding a caller at
+# .github/workflows/gxp-traceability.yml that uses this file.
+#
+# What it checks (in order):
+#   1. .compliance.yml exists and parses. If absent, this repo isn't
+#      regulated — workflow exits success.
+#   2. system_category != none. If "none", exits success.
+#   3. Compute "in-scope changes" = PR's changed files matching
+#      validated_paths minus exempt_paths. If validated_paths is absent
+#      (older schema_version=1 file), falls back to strict mode where
+#      every changed file counts as in-scope.
+#   4. If no in-scope changes: exits success (the PR touches no
+#      validated artefacts).
+#   5. Otherwise, the PR must close (via "Closes #N" / "Fixes #N") at
+#      least one regulated issue, and each such issue must have
+#      non-empty "Risk ID:" and "Requirement ID:" lines in its body.
+#
+# enforcement input:
+#   "evaluate" (default) — failures emit ::warning:: and the workflow
+#       exits 0. Suitable for rollout: violations are visible in PR
+#       conversations and the Actions log, but don't block merges.
+#   "active"  — failures emit ::error:: and the workflow exits 1.
+#       Suitable once you've watched evaluate-mode output for a cycle.
+#
+# Caller example (.github/workflows/gxp-traceability.yml in a
+# regulated repo):
+#
+#   name: GxP traceability
+#   on:
+#     pull_request:
+#       branches: [main, develop]
+#   jobs:
+#     gate:
+#       uses: CCTC-team/.github/.github/workflows/gxp-traceability.yml@main
+#       with:
+#         enforcement: evaluate
+
+on:
+  workflow_call:
+    inputs:
+      compliance_path:
+        description: "Path to .compliance.yml in the caller repo."
+        type: string
+        default: ".compliance.yml"
+      regulated_label:
+        description: "Label that marks an issue as a regulated feature. Issues without this label are not gated."
+        type: string
+        default: "regulated"
+      enforcement:
+        description: "active | evaluate. evaluate logs warnings but does not fail the workflow."
+        type: string
+        default: "evaluate"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        run: |
+          python3 -m venv /tmp/gate
+          /tmp/gate/bin/pip install --quiet --upgrade pip
+          /tmp/gate/bin/pip install --quiet 'pyyaml>=6' 'pathspec>=0.12'
+
+      - name: Resolve compliance state, changed files, and required linkage
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          COMPLIANCE_PATH: ${{ inputs.compliance_path }}
+          REGULATED_LABEL: ${{ inputs.regulated_label }}
+          ENFORCEMENT: ${{ inputs.enforcement }}
+        run: |
+          set -e
+
+          emit() {
+            # emit LEVEL MESSAGE  — LEVEL is "error" in active mode, "warning" in evaluate.
+            local level="$1"; shift
+            if [ "$ENFORCEMENT" = "active" ]; then
+              echo "::error::$*"
+            else
+              echo "::warning::[evaluate-mode] $*"
+            fi
+          }
+
+          # 1. .compliance.yml present?
+          if [ ! -f "$COMPLIANCE_PATH" ]; then
+            echo "No $COMPLIANCE_PATH at base ref — repo not regulated, exiting success."
+            exit 0
+          fi
+
+          # 2. system_category != none?
+          read_yaml=$(/tmp/gate/bin/python <<'PY'
+          import os, yaml, json, sys
+          with open(os.environ["COMPLIANCE_PATH"]) as f:
+              d = yaml.safe_load(f) or {}
+          print(json.dumps({
+              "system_category": d.get("system_category"),
+              "validated_paths": d.get("validated_paths"),
+              "exempt_paths": d.get("exempt_paths") or [],
+          }))
+          PY
+          )
+          system_category=$(echo "$read_yaml" | /tmp/gate/bin/python -c 'import sys,json;print(json.load(sys.stdin)["system_category"] or "")')
+          if [ "$system_category" = "none" ] || [ -z "$system_category" ]; then
+            echo "system_category=$system_category — gate not applicable, exiting success."
+            exit 0
+          fi
+
+          # 3. Compute in-scope changes.
+          git fetch --no-tags --depth=1 origin "$HEAD_SHA" >/dev/null 2>&1 || true
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          if [ -z "$changed" ]; then
+            echo "No file changes in PR — exiting success."
+            exit 0
+          fi
+
+          in_scope=$(/tmp/gate/bin/python <<PY
+          import json, os, sys
+          from pathspec import PathSpec
+          state = json.loads('''$read_yaml''')
+          validated = state.get("validated_paths")
+          exempt = state.get("exempt_paths") or []
+          changed = """$changed""".strip().splitlines()
+          if validated is None:
+              # strict mode — every change is in-scope
+              in_scope = list(changed)
+          else:
+              vspec = PathSpec.from_lines("gitwildmatch", validated)
+              espec = PathSpec.from_lines("gitwildmatch", exempt) if exempt else None
+              in_scope = [p for p in changed if vspec.match_file(p) and not (espec and espec.match_file(p))]
+          for p in in_scope:
+              print(p)
+          PY
+          )
+
+          if [ -z "$in_scope" ]; then
+            echo "PR touches no validated paths — exiting success."
+            echo "## Traceability gate" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "PR touches no validated paths. Gate not applicable." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "In-scope changes:"
+          echo "$in_scope" | sed 's/^/  - /'
+
+          # 4. Resolve linked closing issues via GraphQL.
+          linked_json=$(gh api graphql -F number="$PR_NUMBER" -F owner="${REPO%/*}" -F name="${REPO#*/}" -f query='
+          query($owner: String!, $name: String!, $number: Int!) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $number) {
+                closingIssuesReferences(first: 20) {
+                  nodes { number title body labels(first: 20) { nodes { name } } }
+                }
+              }
+            }
+          }')
+
+          issue_count=$(echo "$linked_json" | /tmp/gate/bin/python -c 'import sys,json;print(len(json.load(sys.stdin)["data"]["repository"]["pullRequest"]["closingIssuesReferences"]["nodes"]))')
+
+          status=0
+
+          if [ "$issue_count" = "0" ]; then
+            emit error "PR closes no issues. A PR touching validated paths must include 'Closes #N' for at least one regulated issue with Risk ID and Requirement ID set."
+            status=1
+          fi
+
+          # 5. For each regulated-labelled linked issue, check Risk ID and Requirement ID.
+          checks=$(/tmp/gate/bin/python <<PY
+          import json, os, re, sys
+          data = json.loads('''$linked_json''')
+          nodes = data["data"]["repository"]["pullRequest"]["closingIssuesReferences"]["nodes"]
+          regulated_label = os.environ["REGULATED_LABEL"]
+          out = []
+          for n in nodes:
+              labels = {l["name"] for l in n["labels"]["nodes"]}
+              regulated = regulated_label in labels
+              body = n["body"] or ""
+              risk = re.search(r"(?im)^[#\s>*-]*risk\s*id\s*:\s*(.+)$", body)
+              req  = re.search(r"(?im)^[#\s>*-]*requirement\s*id\s*:\s*(.+)$", body)
+              out.append({
+                  "number": n["number"],
+                  "title": n["title"],
+                  "regulated": regulated,
+                  "risk_id": (risk.group(1).strip() if risk else ""),
+                  "req_id":  (req.group(1).strip()  if req  else ""),
+              })
+          print(json.dumps(out))
+          PY
+          )
+
+          /tmp/gate/bin/python <<PY
+          import json, os
+          checks = json.loads('''$checks''')
+          # summary
+          lines = ["## Traceability gate", "", f"Enforcement: \`{os.environ['ENFORCEMENT']}\`", "", "| Issue | Regulated | Risk ID | Requirement ID |", "|---|---|---|---|"]
+          for c in checks:
+              lines.append(f"| #{c['number']} {c['title']} | {'yes' if c['regulated'] else 'no'} | {c['risk_id'] or '_missing_'} | {c['req_id'] or '_missing_'} |")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(lines) + "\n")
+          PY
+
+          # any regulated issue missing fields?
+          any_regulated=$(echo "$checks" | /tmp/gate/bin/python -c '
+          import json, sys
+          checks = json.load(sys.stdin)
+          print("1" if any(c["regulated"] for c in checks) else "0")')
+
+          if [ "$issue_count" != "0" ] && [ "$any_regulated" = "0" ]; then
+            emit error "PR closes issues but none carry the '$REGULATED_LABEL' label. Regulated changes must link to a regulated-labelled issue."
+            status=1
+          fi
+
+          for missing in $(echo "$checks" | /tmp/gate/bin/python -c '
+          import json, sys
+          for c in json.load(sys.stdin):
+              if c["regulated"] and (not c["risk_id"] or not c["req_id"]):
+                  miss = []
+                  if not c["risk_id"]: miss.append("Risk ID")
+                  if not c["req_id"]:  miss.append("Requirement ID")
+                  print(f"{c[\"number\"]}:{\",\".join(miss)}")'); do
+            num="${missing%%:*}"
+            fields="${missing#*:}"
+            emit error "Linked regulated issue #$num is missing $fields. Set these in the issue body using the regulated feature template."
+            status=1
+          done
+
+          if [ "$ENFORCEMENT" = "active" ] && [ "$status" != "0" ]; then
+            exit 1
+          fi
+          if [ "$ENFORCEMENT" != "active" ] && [ "$status" != "0" ]; then
+            echo "Gate would have failed in active mode — emitting warnings, exiting 0 (evaluate)."
+          fi
+          exit 0

@@ -23,9 +23,10 @@ For an overview of CCTC and the software we publish, see the
 | `scripts/sync-labels.sh` | Applies `labels.json` to one or all org repos via `gh` |
 | `.github/workflows/sync-labels.yml` | Nightly + on-change run of the label sync |
 | `compliance.schema.json` | JSON Schema for `.compliance.yml` in regulated repos |
-| `templates/compliance/` | `.compliance.yml.example`, `CONTRIBUTING-regulated.md`, README-banner, caller-workflow — pushed by drift |
+| `templates/compliance/` | `.compliance.yml.example`, `CONTRIBUTING-regulated.md`, README-banner, caller workflows (`caller-workflow.yml`, `gxp-traceability-caller.yml`) — pushed by drift |
 | `.github/workflows/compliance-check.yml` | Reusable workflow regulated repos opt into |
 | `.github/workflows/compliance-drift.yml` | Nightly drift correction across regulated repos |
+| `.github/workflows/gxp-traceability.yml` | Reusable PR gate enforcing Risk ID + Requirement ID traceability on changes to validated paths |
 | `scripts/compliance-drift.sh` | Drift-detection logic invoked by the workflow |
 | `rulesets/` | JSON definitions of the planned org-level category rulesets (applied via `gh api`) |
 | `docs/alcoa-sdlc-rationale.md` | Why signed commits are required across all regulated rulesets (inspector-facing) |
@@ -191,6 +192,98 @@ and the validator runs on every PR. It checks:
 - `last_reviewed` is within `review_cadence_months` (and not in the future)
 - `schema_version` is in the validator's supported set (controlled via
   the `supported_schema_versions` input — currently `"1"`)
+
+### Declaring the validated path scope
+
+Schema v2 adds two optional fields to `.compliance.yml`:
+
+```yaml
+validated_paths:
+  - src/**
+  - tests/**
+  - user_requirement_specification/**
+exempt_paths:
+  - "**/README.md"
+```
+
+These declare, per repo, which paths constitute the validated state.
+The **traceability gate** workflow (next section) reads these to decide
+whether a given PR is in scope for Risk ID + Requirement ID enforcement.
+
+Rationale and rules:
+
+- **Per-repo declaration, not a central list.** Repo layouts vary
+  (`src/` vs `lib/`, `tests/` vs `Feature Tests/`, etc.) — a central
+  glob can't predict them all. The `.compliance.yml` is already QMS-
+  controlled by the drift workflow, so it's the right home.
+- **Strict-mode default.** If `validated_paths` is omitted (e.g. an
+  older schema_version=1 file not yet migrated), the gate treats every
+  changed file as in-scope. The absence of a declaration never
+  silently relaxes the rule.
+- **`exempt_paths` is subtractive.** It only excludes files that
+  *also* match `validated_paths`. Use sparingly — README and comment-
+  only files in a validated directory are the common case. Document
+  any addition in the repo's QMS so an inspector can see the carve-
+  out is intentional.
+- **Defensibility.** The rule an inspector sees is "this repo's
+  `.compliance.yml` declares paths X / Y / Z as validated, and CI
+  blocks untraceable changes to those paths." That's stronger than
+  "Claude (or anyone) picked some sensible-looking paths."
+- **Code-review the declaration itself.** A developer narrowing
+  `validated_paths` to skirt the gate is the obvious attack. PRs that
+  touch `.compliance.yml` should route through CODEOWNERS to a QA
+  reviewer; ensure CODEOWNERS in regulated repos covers
+  `/.compliance.yml`.
+
+### Traceability gate
+
+`gxp-traceability.yml` is a **reusable workflow** regulated repos opt
+into. Caller pattern lives in `templates/compliance/gxp-traceability-caller.yml`.
+
+The gate runs on every PR and, for changes that touch in-scope paths
+(per `validated_paths` minus `exempt_paths`), requires:
+
+1. The PR closes at least one issue (`Closes #N` / `Fixes #N` in the
+   PR body or sidebar).
+2. At least one closed issue carries the `regulated` label.
+3. Each regulated-labelled closed issue has non-empty `Risk ID:` and
+   `Requirement ID:` lines in its body — populated automatically by
+   the `feature.yml` / `validation.yml` issue templates.
+
+It does **not** run if:
+
+- The repo has no `.compliance.yml` (not regulated).
+- `system_category == none`.
+- The PR's changed-file set, after applying `validated_paths` /
+  `exempt_paths`, is empty.
+
+#### Enforcement modes
+
+The `enforcement` input (default `evaluate`) controls failure
+behaviour, mirroring the rulesets' evaluate/active pattern:
+
+- `evaluate` — violations emit `::warning::` annotations and a
+  PR-conversation step summary. The workflow exits 0 and does **not**
+  block merges. Use this for rollout while developers and the
+  declared `validated_paths` settle.
+- `active` — violations emit `::error::` and the workflow exits 1.
+  Combine with a branch-protection required-status-check rule (per
+  repo, not org-level — workflow names vary) once you're ready to
+  block merges on untraceable changes.
+
+#### Rollout sequence
+
+1. Ensure each regulated repo has `validated_paths` declared in its
+   `.compliance.yml` (or accept strict-mode default for the migration
+   window).
+2. Add the caller workflow (`templates/compliance/gxp-traceability-caller.yml`)
+   to each regulated repo. Drift can do this once the gate is proven.
+3. Watch evaluate-mode runs for a cycle (1–2 weeks of real PRs).
+   Adjust `validated_paths` / `exempt_paths` as you see false
+   positives.
+4. Flip `enforcement: active` per repo when stable, and add the
+   `gate / gate` status check to that repo's branch-protection
+   required checks.
 
 ### Schema evolution
 
