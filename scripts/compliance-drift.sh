@@ -17,6 +17,7 @@ BANNER_MARKER="compliance:banner"
 for f in "$SCHEMA_FILE" \
          "$TEMPLATES_DIR/.compliance.yml.example" \
          "$TEMPLATES_DIR/caller-workflow.yml" \
+         "$TEMPLATES_DIR/gxp-traceability-caller.yml" \
          "$TEMPLATES_DIR/README-banner.md" \
          "$TEMPLATES_DIR/CONTRIBUTING-regulated.md"; do
   [ -f "$f" ] || { echo "::error::Canonical file missing in .github checkout: $f"; exit 1; }
@@ -112,6 +113,14 @@ check_and_fix() {
   # 5. CONTRIBUTING-regulated.md (kept in sync with canonical)
   if ensure_file_matches "$TEMPLATES_DIR/CONTRIBUTING-regulated.md" "CONTRIBUTING-regulated.md"; then
     changed=1; reasons+=("CONTRIBUTING-regulated.md drift")
+  fi
+
+  # 6. GxP traceability caller workflow (stubbed if missing, NOT
+  # overwritten — repos may have tuned enforcement to active locally
+  # and we mustn't reset that on a nightly run).
+  if [ ! -f .github/workflows/gxp-traceability.yml ]; then
+    ensure_file_matches "$TEMPLATES_DIR/gxp-traceability-caller.yml" ".github/workflows/gxp-traceability.yml" || true
+    changed=1; reasons+=("gxp-traceability caller workflow missing (stubbed)")
   fi
 
   if [ "$changed" -eq 0 ]; then

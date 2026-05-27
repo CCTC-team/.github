@@ -165,7 +165,7 @@ JSON
 
 ### Per-repo opt-in (or just set the property and let drift do it)
 
-Regulated repos need five things. The drift workflow will create any that
+Regulated repos need six things. The drift workflow will create any that
 are missing the next time it runs, but you can also commit them by hand:
 
 1. `.github/compliance.schema.json` — copy of the canonical schema.
@@ -175,9 +175,14 @@ are missing the next time it runs, but you can also commit them by hand:
    (what changes about your day-to-day work in a regulated repo).
 5. `.github/workflows/compliance.yml` — three-line caller that points at
    `compliance-check.yml` in this repo.
+6. `.github/workflows/gxp-traceability.yml` — caller that points at
+   `gxp-traceability.yml` in this repo. Stubbed in `evaluate` mode; flip
+   to `active` locally once the repo's `validated_paths` is settled.
 
-Starter copies of all five live in `templates/compliance/` and at
-`compliance.schema.json`.
+Starter copies of all six live in `templates/compliance/` and at
+`compliance.schema.json`. Drift stubs the GxP caller if absent but
+never overwrites it — once stubbed, the repo owns its
+`enforcement` value.
 
 ### How the validator runs
 

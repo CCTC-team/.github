@@ -5,6 +5,8 @@ name: Compliance scaffold drift check
 #
 #   - .github/compliance.schema.json identical to the canonical copy
 #   - .github/workflows/compliance.yml caller workflow
+#   - .github/workflows/gxp-traceability.yml caller workflow (stubbed
+#     if missing; never overwritten — repos can tune enforcement locally)
 #   - .compliance.yml at repo root (stubbed with today's date if missing)
 #   - README.md carrying the <!-- compliance:banner --> marker
 #   - CONTRIBUTING-regulated.md identical to the canonical copy
