@@ -1,0 +1,93 @@
+name: Regulated feature (V&V)
+description: A user requirement / feature for a GCP-regulated build. Captures the risk linkage, URS, and feature tests for full ICH E6 (R3) traceability.
+title: "[Feature]: "
+labels: ["regulated", "validation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for any feature in a GxP-regulated software product.
+        One card = one User Requirement.
+
+        After creating the issue, add it to the validation project board (a copy of
+        `[TEMPLATE] Regulatory Compliance`) and set the **Risk ID**, **Requirement ID**,
+        **Test Type**, **Critical-to-Quality**, **Approver**, **QA Signoff Date**,
+        and **Deviation Ref** fields on the card.
+
+        The `User spec:` and `Feature link:` sections below are load-bearing —
+        their exact labels are parsed by the gh-val validation tool. Do not
+        rename them.
+
+  - type: input
+    id: risk-id
+    attributes:
+      label: "Risk ID:"
+      description: |
+        ID(s) from the canonical org-level risk register (Excel) that this feature
+        addresses. Comma-separated if multiple. Example: `RISK-014, RISK-022`.
+        Mirror this value into the project card's Risk ID field after creation.
+    validations:
+      required: true
+
+  - type: input
+    id: requirement-id
+    attributes:
+      label: "Requirement ID:"
+      description: Identifier from the URS document. Example `REQ-024`. Mirror to the project card's Requirement ID field.
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Brief description:"
+      description: Plain-English description of the feature being validated.
+    validations:
+      required: true
+
+  - type: textarea
+    id: user-spec
+    attributes:
+      label: "User spec:"
+      description: |
+        URL to the `.spec` file holding the User Requirement Specification.
+        Must be on the configured default branch and end with `.spec`.
+        Parsed by gh-val — keep the label exact.
+      placeholder: "https://github.com/CCTC-team/<repo>/blob/<branch>/user_requirement_specification/features/<n>_<name>.spec"
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature-link
+    attributes:
+      label: "Feature link:"
+      description: |
+        One URL per line. URLs to `.feature` files (Gherkin) that prove this requirement.
+        Must be on the configured default branch and end with `.feature`.
+        Parsed by gh-val — keep the label exact.
+      placeholder: |
+        https://github.com/CCTC-team/<repo>/blob/<branch>/Feature%20Tests/<area>/<n>_<name>/<id>.<descriptor>.feature
+        https://github.com/CCTC-team/<repo>/blob/<branch>/Feature%20Tests/<area>/<n>_<name>/<id>.<descriptor>.feature
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pre-review
+    attributes:
+      label: "Pre review:"
+      description: Reviewer (not the test author) confirms before tests are executed. Tick all that apply when ready to advance the card to Pre review status.
+      options:
+        - label: Script(s) targets the correct feature sufficiently
+        - label: The user requirements are met
+
+  - type: checkboxes
+    id: post-review
+    attributes:
+      label: "Post review:"
+      description: |
+        Reviewer (not the test author) confirms after tests are executed
+        against the validated environment. Tick all before advancing the card
+        to QA approved.
+      options:
+        - label: Script(s) targets the correct feature sufficiently
+        - label: Script(s) appropriately tests the feature
