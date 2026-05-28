@@ -10,9 +10,10 @@ body:
         One card = one User Requirement.
 
         After creating the issue, add it to the validation project board (a copy of
-        `[TEMPLATE] Regulatory Compliance`) and set the **Risk ID**, **Requirement ID**,
-        **Test Type**, **Critical-to-Quality**, **Approver**, **QA Signoff Date**,
-        and **Deviation Ref** fields on the card.
+        `[TEMPLATE] Regulated Feature Lifecycle`) and set the **Risk ID**,
+        **Requirement ID**, **Test Type**, **Critical-to-Quality**, **PQ Approver**,
+        **PQ Signoff Date**, **QA Approver**, **QA Signoff Date**, and
+        **Deviation Ref** fields on the card.
 
         The `User spec:` and `Feature link:` sections below are load-bearing —
         their exact labels are parsed by the gh-val validation tool. Do not
@@ -71,22 +72,30 @@ body:
       required: true
 
   - type: checkboxes
-    id: pre-review
+    id: pq-review
     attributes:
-      label: "Pre review:"
-      description: Reviewer (not the test author) confirms before tests are executed. Tick all that apply when ready to advance the card to Pre review status.
+      label: "PQ review checklist:"
+      description: |
+        Performance Qualification. An end-user representative — not the
+        code author and not the test author — confirms the feature
+        works against the URS in the operational environment. Tick all
+        before advancing the card to PQ review status. The PQ Approver
+        and PQ Signoff Date fields on the project card must be set
+        before moving on to QA review.
       options:
-        - label: Script(s) targets the correct feature sufficiently
-        - label: The user requirements are met
+        - label: Feature meets the user requirement in the operational environment
+        - label: Workflow is usable in practice (not just technically passing)
 
   - type: checkboxes
-    id: post-review
+    id: qa-review
     attributes:
-      label: "Post review:"
+      label: "QA review checklist:"
       description: |
-        Reviewer (not the test author) confirms after tests are executed
-        against the validated environment. Tick all before advancing the card
-        to QA approved.
+        QA process oversight. QA (not the code author, not the test
+        author, not the PQ reviewer) confirms the validation evidence
+        is complete and the URS → V&V → PQ chain is intact. Tick all
+        before advancing the card to QA approved. The QA Approver and
+        QA Signoff Date fields on the project card must be set.
       options:
-        - label: Script(s) targets the correct feature sufficiently
-        - label: Script(s) appropriately tests the feature
+        - label: Risk linkage verified against the canonical risk register
+        - label: URS → V&V evidence chain intact; any deviations are documented
