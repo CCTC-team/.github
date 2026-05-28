@@ -96,6 +96,26 @@ def test_active_mode_skips_revert_when_bypass_label_present():
     assert ("CCTC-team/sample", 11, "process-override:approved") in ctx.actions.labels_removed
 
 
+def test_active_mode_bypass_records_audit_event():
+    ctx = _ctx("active", labels=["process-override:approved"])
+    transition_check(_change("Triage", "QA approved"), ctx)
+    assert len(ctx.bypass_events) == 1
+    event = ctx.bypass_events[0]
+    assert event["repo"] == "CCTC-team/sample"
+    assert event["number"] == 11
+    assert event["item_id"] == "PVTI_1"
+    assert event["old_status"] == "Triage"
+    assert event["new_status"] == "QA approved"
+    assert event["ts"]  # ISO timestamp set
+
+
+def test_evaluate_mode_does_not_record_bypass_event():
+    ctx = _ctx("evaluate", labels=["process-override:approved"])
+    transition_check(_change("Triage", "QA approved"), ctx)
+    # Evaluate mode never reverts and never honours a bypass either.
+    assert ctx.bypass_events == []
+
+
 def test_active_mode_revert_failure_does_not_raise():
     class ExplodingActions(RecordingActions):
         def revert_single_select(self, *args, **kwargs):

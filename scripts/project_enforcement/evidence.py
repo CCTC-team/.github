@@ -42,6 +42,45 @@ class IssueMeta:
     labels: list[str] = field(default_factory=list)
 
 
+# Conclusion values on a check-run that indicate a previous failure
+# the QA precondition should refuse to wave through without a Deviation Ref.
+_FAILED_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "CANCELLED", "STARTUP_FAILURE"}
+
+# Check-run names whose history is recorded for the Deviation Ref gate.
+_TRACKED_CHECK_NAMES = ("gxp-traceability", "compliance", "gate")
+
+
+def _pr_from_graphql(pr: dict, fallback_repo: str) -> "LinkedPR":
+    authors = []
+    failed_history = False
+    for c in (pr.get("commits") or {}).get("nodes", []) or []:
+        commit = c.get("commit") or {}
+        user = (commit.get("author") or {}).get("user")
+        if user and user.get("login"):
+            authors.append(user["login"])
+        for suite in (commit.get("checkSuites") or {}).get("nodes", []) or []:
+            for run in (suite.get("checkRuns") or {}).get("nodes", []) or []:
+                name = (run.get("name") or "").lower()
+                conclusion = (run.get("conclusion") or "").upper()
+                if conclusion in _FAILED_CONCLUSIONS and any(
+                    tracked in name for tracked in _TRACKED_CHECK_NAMES
+                ):
+                    failed_history = True
+
+    return LinkedPR(
+        repo=(pr.get("repository") or {}).get("nameWithOwner") or fallback_repo,
+        number=pr.get("number"),
+        head_sha=pr.get("headRefOid") or "",
+        base_ref=pr.get("baseRefName") or "",
+        state=pr.get("state") or "",
+        merged=bool(pr.get("merged")),
+        merge_commit_sha=(pr.get("mergeCommit") or {}).get("oid"),
+        commit_authors=sorted(set(authors)),
+        check_runs={"rollup": (pr.get("statusCheckRollup") or {}).get("state", "")},
+        failed_check_runs_history=failed_history,
+    )
+
+
 class EvidenceLike(Protocol):
     def issue(self, repo: str, number: int) -> Optional[IssueMeta]: ...
     def linked_prs(self, repo: str, issue_number: int) -> list[LinkedPR]: ...
@@ -88,6 +127,9 @@ class GhEvidence:
         if key in self._prs:
             return self._prs[key]
         owner, name = repo.split("/", 1)
+        # The commits/checkSuites/checkRuns walk is heavy but only fires
+        # when a card enters a status that needs it (QA approved /
+        # Released); cached per (repo, issue) for the rest of the run.
         query = """
         query($owner: String!, $name: String!, $number: Int!) {
           repository(owner: $owner, name: $name) {
@@ -95,26 +137,25 @@ class GhEvidence:
               timelineItems(first: 50, itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT]) {
                 nodes {
                   __typename
-                  ... on CrossReferencedEvent {
-                    source {
-                      __typename
-                      ... on PullRequest {
-                        number state merged mergeCommit { oid } headRefOid baseRefName
-                        repository { nameWithOwner }
-                        commits(last: 100) { nodes { commit { author { user { login } email } } } }
-                        statusCheckRollup { state }
-                      }
-                    }
-                  }
-                  ... on ConnectedEvent {
-                    subject {
-                      __typename
-                      ... on PullRequest {
-                        number state merged mergeCommit { oid } headRefOid baseRefName
-                        repository { nameWithOwner }
-                        commits(last: 100) { nodes { commit { author { user { login } email } } } }
-                        statusCheckRollup { state }
-                      }
+                  ... on CrossReferencedEvent { source { __typename ...prBits } }
+                  ... on ConnectedEvent       { subject { __typename ...prBits } }
+                }
+              }
+            }
+          }
+        }
+        fragment prBits on PullRequest {
+          number state merged mergeCommit { oid } headRefOid baseRefName
+          repository { nameWithOwner }
+          statusCheckRollup { state }
+          commits(last: 100) {
+            nodes {
+              commit {
+                author { user { login } email }
+                checkSuites(first: 20) {
+                  nodes {
+                    checkRuns(first: 50) {
+                      nodes { name conclusion }
                     }
                   }
                 }
@@ -141,24 +182,7 @@ class GhEvidence:
                 pr = ev.get("source") or ev.get("subject") or {}
                 if pr.get("__typename") != "PullRequest":
                     continue
-                authors = []
-                for c in (pr.get("commits") or {}).get("nodes", []) or []:
-                    user = ((c.get("commit") or {}).get("author") or {}).get("user")
-                    if user and user.get("login"):
-                        authors.append(user["login"])
-                prs.append(
-                    LinkedPR(
-                        repo=(pr.get("repository") or {}).get("nameWithOwner") or repo,
-                        number=pr.get("number"),
-                        head_sha=pr.get("headRefOid") or "",
-                        base_ref=pr.get("baseRefName") or "",
-                        state=pr.get("state") or "",
-                        merged=bool(pr.get("merged")),
-                        merge_commit_sha=(pr.get("mergeCommit") or {}).get("oid"),
-                        commit_authors=sorted(set(authors)),
-                        check_runs={"rollup": (pr.get("statusCheckRollup") or {}).get("state", "")},
-                    )
-                )
+                prs.append(_pr_from_graphql(pr, repo))
             self._prs[key] = prs
         except subprocess.CalledProcessError:
             self._prs[key] = []

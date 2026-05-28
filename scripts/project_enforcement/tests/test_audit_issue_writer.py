@@ -111,6 +111,36 @@ def test_no_action_when_no_findings_and_no_prior_issue():
     assert gh.issues == []
 
 
+def test_bypass_section_rendered():
+    gh = FakeGh()
+    bypass = [{
+        "ts": "2026-05-20T10:00:00+00:00",
+        "repo": "CCTC-team/foo",
+        "number": 11,
+        "item_id": "PVTI_x",
+        "old_status": "Triage",
+        "new_status": "QA approved",
+    }]
+    update_audit_issue(gh, PROJECT_LABEL, [], unmonitored=[], bypass_events=bypass)
+    body = gh.issues[0].body
+    assert "Recent bypasses honoured" in body
+    assert "CCTC-team/foo#11" in body
+    assert "Triage" in body and "QA approved" in body
+
+
+def test_bypass_alone_keeps_issue_open():
+    # A bypass with no other findings should still leave the rolling issue open.
+    gh = FakeGh()
+    gh.issues.append(FakeIssue(number=42, title=TITLE, body="old"))
+    bypass = [{
+        "ts": "2026-05-20T10:00:00+00:00",
+        "repo": "CCTC-team/foo", "number": 11,
+        "item_id": "PVTI_x", "old_status": "Triage", "new_status": "QA approved",
+    }]
+    update_audit_issue(gh, PROJECT_LABEL, [], unmonitored=[], bypass_events=bypass)
+    assert gh.issues[0].state == "open"
+
+
 def test_unmonitored_section_rendered():
     gh = FakeGh()
     unmonitored_finding = Finding(

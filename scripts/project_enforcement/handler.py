@@ -53,6 +53,11 @@ class CheckContext:
     snapshot: dict  # the current-state snapshot (new), so checks can look up item meta
     actions: ActionsLike
     evidence: Optional[EvidenceLike] = None
+    # Per-run audit log. Checks append a record when they honour a bypass
+    # label; the handler folds the list into the new snapshot before
+    # writing it out, so the nightly audit can render recent overrides
+    # in the rolling drift issue.
+    bypass_events: list = dataclasses.field(default_factory=list)
 
 
 CheckFn = Callable[[snapshot.CardChange, CheckContext], None]
@@ -179,6 +184,11 @@ def run(
         old_snap = load_snapshot(state_path(state_dir, project_cfg))
         diff = snapshot.compute_diff(old_snap, new_snap)
 
+        # Carry the bypass-event log forward across snapshots; it's the
+        # audit-trail record of every override the bot honoured. Checks
+        # append into the same list via ctx.bypass_events.
+        bypass_events = list((old_snap or {}).get("bypass_events") or [])
+
         try:
             fields = resolve_fields(project_json)
         except KeyError as exc:
@@ -213,6 +223,7 @@ def run(
                     snapshot=new_snap,
                     actions=actions,
                     evidence=evidence,
+                    bypass_events=bypass_events,
                 )
                 _log_event(
                     event="check_dispatch",
@@ -240,6 +251,7 @@ def run(
                         snapshot=new_snap,
                         actions=actions,
                         evidence=evidence,
+                        bypass_events=bypass_events,
                     )
                     item = (new_snap.get("items") or {}).get(change.item_id) or {}
                     reasons = PRECONDITIONS[status](item, pctx, evidence)
@@ -266,11 +278,29 @@ def run(
                                 clear_bypass, has_bypass, revert_status,
                             )
                             if has_bypass(pctx, item["source_repo"], item["number"]):
-                                clear_bypass(pctx, item["source_repo"], item["number"])
+                                clear_bypass(
+                                    pctx, item["source_repo"], item["number"],
+                                    item_id=change.item_id,
+                                    old_status=change.old_value,
+                                    new_status=change.new_value,
+                                )
                             else:
                                 revert_status(pctx, change.item_id, change.old_value)
 
         summary_lines.append(f"\nChecks fired: **{fired}**\n")
+
+        # Age out bypass events older than 30 days before persisting; the
+        # audit only needs a recent window for the rolling-issue panel.
+        cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)
+        def _recent(ev):
+            ts = ev.get("ts")
+            if not ts:
+                return True
+            try:
+                return datetime.datetime.fromisoformat(ts) >= cutoff
+            except ValueError:
+                return True
+        new_snap["bypass_events"] = [ev for ev in bypass_events if _recent(ev)]
 
         write_snapshot(state_path(state_dir, project_cfg), new_snap)
         _log_event(event="snapshot_written", project=name)

@@ -100,6 +100,67 @@ def test_days_since_handles_iso():
     assert days_since("not-a-date") is None
 
 
+def test_unticked_pq_checklist_at_pq_review_is_reported():
+    snap = _snapshot([_item(status="PQ review")])
+    body = (
+        "### PQ review checklist:\n\n"
+        "- [x] Feature meets the user requirement in the operational environment\n"
+        "- [ ] Workflow is usable in practice (not just technically passing)\n"
+    )
+    findings = audit_project(
+        snap,
+        issue_authors={},
+        issue_bodies={("CCTC-team/foo", 1): body},
+    )
+    assert any(
+        f.category == "checklist_unticked" and "PQ checklist" in f.summary
+        for f in findings
+    )
+
+
+def test_unticked_qa_checklist_at_qa_approved_is_reported():
+    snap = _snapshot([_item(status="QA approved", fields=_full_fields())])
+    body = (
+        "### QA review checklist:\n\n"
+        "- [x] Risk linkage verified against the canonical risk register\n"
+        "- [ ] URS → V&V evidence chain intact; any deviations are documented\n"
+    )
+    findings = audit_project(
+        snap,
+        issue_authors={("CCTC-team/foo", 1): "alice"},
+        issue_bodies={("CCTC-team/foo", 1): body},
+    )
+    assert any(
+        f.category == "checklist_unticked" and "QA checklist" in f.summary
+        for f in findings
+    )
+
+
+def test_fully_ticked_checklists_at_qa_approved_is_silent():
+    snap = _snapshot([_item(status="QA approved", fields=_full_fields())])
+    body = (
+        "### PQ review checklist:\n\n"
+        "- [x] Feature meets the user requirement in the operational environment\n"
+        "- [x] Workflow is usable in practice (not just technically passing)\n\n"
+        "### QA review checklist:\n\n"
+        "- [x] Risk linkage verified against the canonical risk register\n"
+        "- [x] URS → V&V evidence chain intact; any deviations are documented\n"
+    )
+    findings = audit_project(
+        snap,
+        issue_authors={("CCTC-team/foo", 1): "alice"},
+        issue_bodies={("CCTC-team/foo", 1): body},
+    )
+    assert [f for f in findings if f.category == "checklist_unticked"] == []
+
+
+def test_checklist_check_silent_when_body_absent():
+    # No issue body fetched — audit should not invent failures.
+    snap = _snapshot([_item(status="PQ review")])
+    findings = audit_project(snap, issue_authors={}, issue_bodies={})
+    assert [f for f in findings if f.category == "checklist_unticked"] == []
+
+
 def test_required_fields_constant_matches_design():
     assert REQUIRED_FIELDS_AT_QA == (
         "Risk ID",

@@ -7,6 +7,7 @@ across both call sites.
 
 from __future__ import annotations
 
+import datetime
 from typing import Optional
 
 
@@ -23,9 +24,21 @@ def has_bypass(ctx, repo: str, number: int) -> bool:
     return label in (issue.labels or [])
 
 
-def clear_bypass(ctx, repo: str, number: int) -> None:
+def clear_bypass(ctx, repo: str, number: int, *, item_id: Optional[str] = None,
+                 old_status: Optional[str] = None,
+                 new_status: Optional[str] = None) -> None:
     label = (ctx.config or {}).get("bypass_label", "process-override:approved")
     ctx.actions.remove_label(repo, number, label)
+    events = getattr(ctx, "bypass_events", None)
+    if events is not None:
+        events.append({
+            "ts": datetime.datetime.now(datetime.UTC).isoformat(),
+            "repo": repo,
+            "number": number,
+            "item_id": item_id,
+            "old_status": old_status,
+            "new_status": new_status,
+        })
 
 
 def revert_status(ctx, item_id: str, target_status: Optional[str]) -> bool:

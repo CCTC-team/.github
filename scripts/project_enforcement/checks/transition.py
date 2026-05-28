@@ -63,7 +63,12 @@ def check(change: CardChange, ctx) -> None:
         return
 
     if has_bypass(ctx, repo, number):
-        clear_bypass(ctx, repo, number)
+        clear_bypass(
+            ctx, repo, number,
+            item_id=change.item_id,
+            old_status=change.old_value,
+            new_status=change.new_value,
+        )
         return
 
     revert_status(ctx, change.item_id, change.old_value)

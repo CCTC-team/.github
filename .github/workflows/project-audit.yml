@@ -118,20 +118,23 @@ jobs:
           _issue_cache = {}
           _pr_cache = {}
 
-          def lookup_issue_author(repo, number):
+          def lookup_issue(repo, number):
               key = (repo, number)
               if key in _issue_cache:
                   return _issue_cache[key]
               try:
                   out = subprocess.run(
-                      ["gh", "issue", "view", str(number), "-R", repo, "--json", "author"],
+                      ["gh", "issue", "view", str(number), "-R", repo, "--json", "author,body"],
                       check=True, capture_output=True, text=True,
                   ).stdout
-                  author = (json.loads(out).get("author") or {}).get("login") or ""
+                  data = json.loads(out)
+                  _issue_cache[key] = {
+                      "author": (data.get("author") or {}).get("login") or "",
+                      "body": data.get("body") or "",
+                  }
               except subprocess.CalledProcessError:
-                  author = ""
-              _issue_cache[key] = author
-              return author
+                  _issue_cache[key] = {"author": "", "body": ""}
+              return _issue_cache[key]
 
           def lookup_linked_prs(repo, number):
               key = (repo, number)
@@ -190,6 +193,7 @@ jobs:
 
               # Build the external-lookup dicts for items the audit needs them for.
               issue_authors = {}
+              issue_bodies = {}
               pr_history = {}
               for item_id, meta in (snapshot.get("items") or {}).items():
                   status = (meta.get("fields") or {}).get("Status")
@@ -197,12 +201,22 @@ jobs:
                   num = meta.get("number")
                   if not repo or not num:
                       continue
-                  if status in ("QA approved", "Released"):
-                      issue_authors[(repo, num)] = lookup_issue_author(repo, num)
+                  needs_issue = status in ("QA approved", "Released", "PQ review")
+                  if needs_issue:
+                      info = lookup_issue(repo, num)
+                      issue_authors[(repo, num)] = info["author"]
+                      issue_bodies[(repo, num)] = info["body"]
                   if status == "Released":
                       pr_history[(repo, num)] = lookup_linked_prs(repo, num)
 
-              findings = audit_project(snapshot, issue_authors=issue_authors, pr_history=pr_history)
+              findings = audit_project(
+                  snapshot,
+                  issue_authors=issue_authors,
+                  pr_history=pr_history,
+                  issue_bodies=issue_bodies,
+              )
+
+              bypass_events = list(snapshot.get("bypass_events") or [])
 
               # Run the unmonitored-clone discovery once, on the first iteration,
               # against the project owner of project 0. The output is per-owner
@@ -255,5 +269,9 @@ jobs:
               else:
                   unmonitored = []
 
-              update_audit_issue(gh, label, findings, unmonitored=unmonitored)
+              update_audit_issue(
+                  gh, label, findings,
+                  unmonitored=unmonitored,
+                  bypass_events=bypass_events,
+              )
           PY
