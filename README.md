@@ -23,15 +23,21 @@ For an overview of CCTC and the software we publish, see the
 | `scripts/sync-labels.sh` | Applies `labels.json` to one or all org repos via `gh` |
 | `.github/workflows/sync-labels.yml` | Nightly + on-change run of the label sync |
 | `compliance.schema.json` | JSON Schema for `.compliance.yml` in regulated repos |
-| `templates/compliance/` | `.compliance.yml.example`, `CONTRIBUTING-regulated.md`, README-banner, caller workflows (`caller-workflow.yml`, `gxp-traceability-caller.yml`) — pushed by drift |
+| `templates/compliance/` | `.compliance.yml.example`, `CONTRIBUTING-regulated.md`, README-banner, caller workflows (`caller-workflow.yml`, `gxp-traceability-caller.yml`, `project-card-promote-caller.yml`) — pushed by drift |
 | `.github/workflows/compliance-check.yml` | Reusable workflow regulated repos opt into |
 | `.github/workflows/compliance-drift.yml` | Nightly drift correction across regulated repos |
 | `.github/workflows/gxp-traceability.yml` | Reusable PR gate enforcing Risk ID + Requirement ID traceability on changes to validated paths |
+| `.github/workflows/project-enforcement.yml` | 5-minute poller that diffs the regulated lifecycle board(s) and dispatches each card change to the checks under `scripts/project_enforcement/` |
+| `.github/workflows/project-card-promote.yml` | Reusable PR-driven forward-only promoter (Code review / V&V tests pass). Callers live in regulated repos. |
+| `.github/workflows/project-audit.yml` | Nightly sweep that maintains a rolling `Project enforcement drift` issue per board |
+| `.github/project-enforcement.yml` | On/evaluate/active switchboard read by the poller + audit |
+| `scripts/project_enforcement/` | Python package: snapshot/diff, state machine, per-status preconditions, drift checks, audit, PR promoter decision logic |
 | `scripts/compliance-drift.sh` | Drift-detection logic invoked by the workflow |
 | `rulesets/` | JSON definitions of the planned org-level category rulesets (applied via `gh api`) |
 | `docs/alcoa-sdlc-rationale.md` | Why signed commits are required across all regulated rulesets (inspector-facing) |
 | `docs/commit-signing-setup.md` | Developer-facing setup guide (SSH/GPG, runners, verification) |
 | `docs/compliance-drift-app-setup.md` | Runbook for provisioning the `CCTC Compliance Drift` GitHub App |
+| `docs/project-enforcement-app-setup.md` | Runbook for provisioning the token used by `project-enforcement.yml` (two options) |
 
 ## How inheritance works (and doesn't)
 
@@ -165,7 +171,7 @@ JSON
 
 ### Per-repo opt-in (or just set the property and let drift do it)
 
-Regulated repos need six things. The drift workflow will create any that
+Regulated repos need seven things. The drift workflow will create any that
 are missing the next time it runs, but you can also commit them by hand:
 
 1. `.github/compliance.schema.json` — copy of the canonical schema.
@@ -178,6 +184,14 @@ are missing the next time it runs, but you can also commit them by hand:
 6. `.github/workflows/gxp-traceability.yml` — caller that points at
    `gxp-traceability.yml` in this repo. Stubbed in `evaluate` mode; flip
    to `active` locally once the repo's `validated_paths` is settled.
+7. `.github/workflows/project-card-promote.yml` — caller that points at
+   `project-card-promote.yml` in this repo. Forward-only PR-driven
+   moves through the *automatic* lifecycle states (`Code review`,
+   `V&V tests pass`). Set the `LIFECYCLE_PROJECT_NUMBER` repo
+   variable to the number of the lifecycle board this repo's cards
+   live on (e.g. `31` for the test board). Without it, the promoter
+   no-ops via its guard step — drift never sets the variable for you
+   because choosing the board is a deliberate per-repo decision.
 
 Starter copies of all six live in `templates/compliance/` and at
 `compliance.schema.json`. Drift stubs the GxP caller if absent but
@@ -494,6 +508,104 @@ gh api /orgs/CCTC-team/rulesets \
 
 Updating a ruleset later uses `PUT /orgs/CCTC-team/rulesets/{id}`
 with the same JSON payload; the `id` comes from the list above.
+
+## Project board enforcement
+
+Branch protection guards the **issue → PR → merge** path; the regulated
+lifecycle **board** is guarded separately by
+[`.github/workflows/project-enforcement.yml`](.github/workflows/project-enforcement.yml).
+The workflow polls every project listed in
+[`.github/project-enforcement.yml`](.github/project-enforcement.yml)
+every five minutes, diffs the current state against a snapshot stored
+on the `_project-state` branch, and dispatches each card change to a
+suite of checks.
+
+### What it enforces
+
+- **State machine.** Forward moves must advance one column at a time.
+  Backward moves are always legal; side exits (`Redundant`,
+  `Archived`) are legal from anywhere and only restore to `Triage`.
+- **Per-column preconditions.** Entering `Risk linked` requires a
+  `Risk ID` mirrored to the issue body; entering `Requirement defined`
+  adds Requirement ID + Critical-to-Quality; `In development` requires
+  an assignee, iteration, and (for critical work) a PQ-flavoured Test
+  Type; `Code review` requires an open linked PR; `V&V tests pass`
+  requires green gxp-traceability + compliance checks on the PR and a
+  resolvable `.feature` URL on the default branch; `PQ review` /
+  `QA approved` require the issue's PQ / QA checkboxes ticked,
+  approver usernames that resolve, segregation of duties across
+  author / PQ / QA, and (for QA) a `Deviation Ref` when any historical
+  gxp-traceability run failed; `Released` requires the linked PR
+  merged to the default branch and a release tag referencing the
+  merge SHA.
+- **Field-drift.** Changes to `Risk ID` / `Requirement ID` that no
+  longer match the issue body, signoff dates in the future or before
+  the issue was opened, PQ-after-QA, approver changes on cards already
+  past their review column, and `Critical-to-Quality=Yes` paired with
+  `Test Type=N/A` all fire comments.
+- **PR-driven promotion (forward-only).** A reusable workflow
+  [`.github/workflows/project-card-promote.yml`](.github/workflows/project-card-promote.yml)
+  moves cards from earlier states forward through `Code review` (on PR
+  opened) and `V&V tests pass` (on green check_suite). Human-attested
+  states (`PQ review`, `QA approved`, `Released`) are never reached
+  by automation.
+- **Nightly audit.** [`.github/workflows/project-audit.yml`](.github/workflows/project-audit.yml)
+  runs at 02:00 UTC, maintains one rolling
+  `Project enforcement drift — <board>` issue per project in
+  `CCTC-team/.github`, and discovers any org project whose Status
+  options look like a lifecycle board but isn't listed in
+  `project-enforcement.yml`.
+
+### Evaluate → active rollout
+
+Every check carries its own mode in `project-enforcement.yml`:
+
+- `off` — handler doesn't run the check.
+- `evaluate` — handler runs the check and emits comment + label; never
+  reverts.
+- `active` — handler runs the check, comments, labels, **and**
+  reverts the offending field write. Bypass via
+  `process-override:approved` on the linked issue, single-use,
+  cleared after honouring.
+
+Checks graduate independently — `transition` flips to `active` after
+one clean evaluate week, then the lower-risk preconditions
+(`Risk linked`, `Requirement defined`, `In development`,
+`Code review`), then the four human-attestation gates last.
+
+### Active-mode rollout log
+
+Each check's flip from `evaluate` to `active` is a deliberate
+operational decision after one clean evaluate week. Record the date
+inline so the audit trail is here, not in chat:
+
+| Check | Flipped active | Notes |
+| --- | --- | --- |
+| `transition` | _pending_ | Awaiting first clean evaluate week |
+| `preconditions: Risk linked` | _pending_ | |
+| `preconditions: Requirement defined` | _pending_ | |
+| `preconditions: In development` | _pending_ | |
+| `preconditions: Code review` | _pending_ | |
+| `preconditions: V&V tests pass` | _pending_ | |
+| `preconditions: PQ review` | _pending_ | |
+| `preconditions: QA approved` | _pending_ | |
+| `preconditions: Released` | _pending_ | Depends on Phase 5 PR promoter being green |
+| `drift_id_mirror` | _pending_ | |
+| `drift_date_sanity` | _pending_ | |
+| `drift_approver_identity` | _pending_ | |
+| `drift_type_quality` | _pending_ | |
+
+To flip a row, edit `.github/project-enforcement.yml` and replace this
+table cell with the date (`2026-MM-DD`) and the audit issue number
+that proves the evaluate week was clean.
+
+### App + secrets
+
+The poller, promoter, and audit each need a token with `read:project`
++ `write:project` + `read:org`. Provisioning instructions and two
+options (expand the Compliance Drift App or stand up a separate
+`CCTC Project Enforcement` App) live in
+[`docs/project-enforcement-app-setup.md`](docs/project-enforcement-app-setup.md).
 
 ## Deliberately not done
 

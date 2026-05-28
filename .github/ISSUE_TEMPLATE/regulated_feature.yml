@@ -19,6 +19,12 @@ body:
         their exact labels are parsed by the gh-val validation tool. Do not
         rename them.
 
+        **The PQ / QA checkboxes below are enforced by board automation.**
+        The project-enforcement workflow reads them from the issue body when a
+        card moves into PQ review / QA approved; unticked items block the move
+        with a `process-violation` comment + label. They are not just process
+        guidance.
+
   - type: input
     id: risk-id
     attributes:

@@ -68,6 +68,48 @@ AI assistance is allowed in this repo, with two hard rules:
     PR is responsible for everything it contains. "Claude wrote it"
     isn't a defence at audit.
 
+## Lifecycle board
+
+Regulated work moves card-by-card through a forward-only project board.
+Each regulated repo is mapped to a specific lifecycle board via its
+`LIFECYCLE_PROJECT_NUMBER` repo variable; the boards under enforcement
+are listed in
+[`CCTC-team/.github/.github/project-enforcement.yml`](https://github.com/CCTC-team/.github/blob/main/.github/project-enforcement.yml)
+under `projects:`. Ask the QA lead which board this repo lives on if
+you're not sure.
+
+The board is **enforced** by automation — moves that skip steps are
+commented on, labelled `process-violation`, and (as checks graduate)
+reverted.
+
+- **Status order is enforced.** Forward moves advance one column at a
+  time. Backward moves and side exits (`Redundant`, `Archived`) are
+  always allowed. From `Redundant` or `Archived`, the only legal
+  restoration target is `Triage` — a card cannot launder its history by
+  being archived and dropped back into a later column.
+- **Approver fields must be GitHub usernames.** `PQ Approver` and
+  `QA Approver` are free-text on the card; type the username without
+  the `@`. The automation validates the login via the GitHub API and
+  refuses the move if it doesn't resolve.
+- **Segregation of duties is required.** The PR author, PQ Approver,
+  and QA Approver must be three distinct people. The audit flags any
+  card that ends in `QA approved` with fewer than three identities.
+- **PQ / QA checkboxes on the issue body are load-bearing.** Tick them
+  before moving the card to `PQ review` / `QA approved` — the
+  automation reads them from the issue body, not from your memory.
+- **`Risk ID` / `Requirement ID` on the card mirror the issue body.**
+  The issue body is canonical; edit the issue, not the card, if they
+  diverge. Drift fires a comment within 5 minutes.
+- **Bypasses are single-use and admin-gated.** If you genuinely need
+  to skip a step, ask an org admin to apply
+  `process-override:approved` on the linked issue. The label is
+  honoured for one transition and cleared by the bot afterwards.
+  Every bypass is recorded in the nightly audit issue.
+- **Rolling audit issue.** A daily sweep maintains
+  `Project enforcement drift — <board name>` in
+  `CCTC-team/.github`. Findings appear there overnight; the issue is
+  auto-closed when the board is clean.
+
 ## How CI enforces what it can
 
 - `.compliance.yml` must parse and validate against the schema.

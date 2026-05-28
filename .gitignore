@@ -22,3 +22,11 @@
 
 # Per-user agent / editor state
 .claude/
+
+# Python build artefacts
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local working-doc area for AI planning skills
+AIPlans/

@@ -1,0 +1,43 @@
+# Project board enforcement — single switch the team uses to graduate
+# checks from off → evaluate → active.
+#
+# Lives in CCTC-team/.github only; deliberately NOT pushed by compliance
+# drift into regulated repos. The handler in scripts/project_enforcement/
+# reads this file at the start of every run.
+#
+# checks:
+#   off       handler does not run the check at all
+#   evaluate  handler runs the check and emits comments + labels, but
+#             never reverts a card field. Use this to watch a check for
+#             a cycle before turning it on.
+#   active    handler runs the check, comments, labels AND reverts the
+#             offending field write. Honour the bypass label.
+#
+# Add a project here to bring its cards under enforcement. The handler
+# resolves field IDs by name from each project at run-time so the same
+# config works against a freshly cloned board.
+
+projects:
+  - owner: CCTC-team
+    number: 31
+    name: "[TEST] Regulated Feature Lifecycle"
+
+checks:
+  transition: evaluate
+  drift_id_mirror: evaluate
+  drift_date_sanity: evaluate
+  drift_approver_identity: evaluate
+  drift_type_quality: evaluate
+
+preconditions:
+  Risk linked: evaluate
+  Requirement defined: evaluate
+  In development: evaluate
+  Code review: evaluate
+  V&V tests pass: evaluate
+  PQ review: evaluate
+  QA approved: evaluate
+  Released: evaluate
+
+bypass_label: "process-override:approved"
+default_branch_fallback: main

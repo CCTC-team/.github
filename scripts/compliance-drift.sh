@@ -18,6 +18,7 @@ for f in "$SCHEMA_FILE" \
          "$TEMPLATES_DIR/.compliance.yml.example" \
          "$TEMPLATES_DIR/caller-workflow.yml" \
          "$TEMPLATES_DIR/gxp-traceability-caller.yml" \
+         "$TEMPLATES_DIR/project-card-promote-caller.yml" \
          "$TEMPLATES_DIR/README-banner.md" \
          "$TEMPLATES_DIR/CONTRIBUTING-regulated.md"; do
   [ -f "$f" ] || { echo "::error::Canonical file missing in .github checkout: $f"; exit 1; }
@@ -122,6 +123,24 @@ check_and_fix() {
     ensure_file_matches "$TEMPLATES_DIR/gxp-traceability-caller.yml" ".github/workflows/gxp-traceability.yml" || true
     changed=1; reasons+=("gxp-traceability caller workflow missing (stubbed)")
   fi
+
+  # 7. Project-card promote caller workflow (stubbed if missing, NOT
+  # overwritten — repos may swap the source ref or customise inputs).
+  # Without the LIFECYCLE_PROJECT_NUMBER repo variable the workflow
+  # no-ops on its guard step; the caller is safe to ship before the
+  # variable is configured.
+  if [ ! -f .github/workflows/project-card-promote.yml ]; then
+    ensure_file_matches "$TEMPLATES_DIR/project-card-promote-caller.yml" ".github/workflows/project-card-promote.yml" || true
+    changed=1; reasons+=("project-card-promote caller workflow missing (stubbed)")
+  fi
+
+  # NB: The drift workflow does not check LIFECYCLE_PROJECT_NUMBER on
+  # each regulated repo. Doing so would require the App to hold
+  # `Variables: read`, which is broader than this App's existing scopes
+  # and is not worth adding for a soft warning. The promoter caller
+  # workflow's own guard step prints a step-summary line on every PR
+  # run when the variable is unset, so the signal lands in the right
+  # place (the PR, not the drift PR) anyway.
 
   if [ "$changed" -eq 0 ]; then
     echo "  ✓ no drift"

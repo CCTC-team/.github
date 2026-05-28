@@ -14,5 +14,7 @@
   { "name": "build",              "color": "5afc83", "description": "Build, packaging, or deployment" },
   { "name": "validation",         "color": "216d15", "description": "Validation / verification per GCP" },
   { "name": "breaking-change",    "color": "b60205", "description": "Backwards-incompatible change" },
-  { "name": "documentation",      "color": "0075ca", "description": "Documentation improvement" }
+  { "name": "documentation",      "color": "0075ca", "description": "Documentation improvement" },
+  { "name": "process-violation", "color": "b60205", "description": "Skipped a required step in the regulated-feature lifecycle" },
+  { "name": "process-override:approved", "color": "fbca04", "description": "Org admin has authorised a single bypass of the lifecycle gate" }
 ]

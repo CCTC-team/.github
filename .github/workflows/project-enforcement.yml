@@ -1,0 +1,131 @@
+name: Project board enforcement (poller)
+
+# Cron-driven sweep of every project listed in
+# .github/project-enforcement.yml. Diffs the live board against a snapshot
+# stored on a dedicated `_project-state` branch and dispatches each change
+# to the registered checks. No checks fire while everything is `off` in
+# the config — the guard step below short-circuits in that case to keep
+# the cron cheap during early rollout.
+#
+# Snapshot state lives on a force-pushed orphan branch (`_project-state`,
+# bot-only) so an inspector can see the history of project state across
+# runs.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# Never overlap runs and never lose state — concurrent runs would race on
+# the snapshot branch and on issue-comment side effects.
+concurrency:
+  group: project-enforcement
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # commit/force-push the _project-state branch
+      issues: write         # post comments and labels
+      pull-requests: read
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Guard — bail if config missing or every check is `off`
+        id: guard
+        env:
+          CONFIG_PATH: .github/project-enforcement.yml
+        run: |
+          set -e
+          if [ ! -f "$CONFIG_PATH" ]; then
+            echo "::notice::No $CONFIG_PATH — nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 - "$CONFIG_PATH" <<'PY'
+          import sys, yaml, os
+          cfg = yaml.safe_load(open(sys.argv[1])) or {}
+          def is_off(v):
+              return v in (None, "", "off", False)
+          checks = (cfg.get("checks") or {}).values()
+          preconditions = (cfg.get("preconditions") or {}).values()
+          if all(is_off(v) for v in list(checks) + list(preconditions)):
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write("skip=true\n")
+              print("::notice::All checks are `off` — handler skipped.")
+          else:
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write("skip=false\n")
+          PY
+
+      - name: Checkout snapshot branch
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: _project-state
+          path: _project-state
+        continue-on-error: true
+
+      - name: Ensure snapshot directory exists
+        if: steps.guard.outputs.skip != 'true'
+        run: mkdir -p _project-state
+
+      - name: Set up Python
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          python3 -m venv /tmp/pe
+          /tmp/pe/bin/pip install --quiet --upgrade pip
+          /tmp/pe/bin/pip install --quiet 'pyyaml>=6' 'pathspec>=0.12'
+
+      - name: Generate app token
+        if: steps.guard.outputs.skip != 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.ORG_PROJECT_ENFORCEMENT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ORG_PROJECT_ENFORCEMENT_APP_PRIVATE_KEY }}
+          owner: CCTC-team
+
+      - name: Run handler
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          /tmp/pe/bin/python scripts/project_enforcement/handler.py \
+            --config .github/project-enforcement.yml \
+            --state-dir _project-state
+
+      - name: Commit snapshot
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -e
+          cd _project-state
+          # _project-state is an orphan branch — initialise it the first time.
+          if [ ! -d .git ]; then
+            git init --quiet
+            git checkout --orphan _project-state
+          fi
+          git config user.name  "cctc-project-enforcement-bot"
+          git config user.email "project-enforcement-bot@users.noreply.github.com"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No snapshot changes."
+            exit 0
+          fi
+          git add -A
+          git commit -m "Snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Force-push: snapshot history is a chain of small JSON deltas,
+          # not a branch anyone merges into.
+          gh auth setup-git
+          remote_url="$(git config --get remote.origin.url || true)"
+          if [ -z "$remote_url" ]; then
+            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git push -f origin _project-state

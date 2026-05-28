@@ -1,0 +1,259 @@
+name: Project enforcement nightly audit
+
+# Global daily sweep — catches anything the 5-minute poller missed
+# (cards present before this system existed, polling-window gaps,
+# history rewrites). Maintains one rolling issue per project; closes
+# the issue when findings clear and reopens when they reappear.
+#
+# Runs at 02:00 UTC; the compliance-drift cron at 04:37 UTC runs later
+# so the audit always sees the latest snapshot.
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: project-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+
+      - name: Checkout snapshot branch
+        uses: actions/checkout@v6
+        with:
+          ref: _project-state
+          path: _project-state
+        continue-on-error: true
+
+      - name: Set up Python
+        run: |
+          python3 -m venv /tmp/audit
+          /tmp/audit/bin/pip install --quiet --upgrade pip
+          /tmp/audit/bin/pip install --quiet 'pyyaml>=6'
+
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.ORG_PROJECT_ENFORCEMENT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ORG_PROJECT_ENFORCEMENT_APP_PRIVATE_KEY }}
+          owner: CCTC-team
+
+      - name: Run nightly audit
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PYTHONPATH: ${{ github.workspace }}/scripts
+          CONFIG_PATH: .github/project-enforcement.yml
+          STATE_DIR: _project-state
+          AUDIT_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          /tmp/audit/bin/python <<'PY'
+          import json, os, subprocess, sys, yaml
+          sys.path.insert(0, "scripts")
+          from project_enforcement.audit import (
+              audit_project, discover_unmonitored, update_audit_issue,
+          )
+
+          cfg = yaml.safe_load(open(os.environ["CONFIG_PATH"])) or {}
+          state_dir = os.environ["STATE_DIR"]
+          audit_repo = os.environ["AUDIT_REPO"]
+
+          # ---- gh wrapper bound to .github so the audit issue lives in this repo ----
+          class GhBoundIssues:
+              def _list(self, title, state):
+                  out = subprocess.run(
+                      ["gh", "issue", "list", "-R", audit_repo,
+                       "--state", state, "--limit", "200",
+                       "--search", f'"{title}" in:title',
+                       "--json", "number,title,body,state"],
+                      check=True, capture_output=True, text=True,
+                  ).stdout
+                  for issue in json.loads(out):
+                      if issue["title"] == title:
+                          class _I: pass
+                          i = _I()
+                          i.number = issue["number"]
+                          i.title = issue["title"]
+                          i.body = issue["body"] or ""
+                          i.state = issue["state"].lower()
+                          return i
+                  return None
+              def find_open(self, title):
+                  return self._list(title, "open")
+              def find_any(self, title):
+                  return self._list(title, "all")
+              def create_issue(self, title, body):
+                  subprocess.run(
+                      ["gh", "issue", "create", "-R", audit_repo,
+                       "--title", title, "--body", body],
+                      check=True,
+                  )
+              def update_issue(self, number, body=None, state=None):
+                  if body is not None:
+                      subprocess.run(
+                          ["gh", "issue", "edit", str(number), "-R", audit_repo, "--body", body],
+                          check=True,
+                      )
+                  if state == "closed":
+                      subprocess.run(["gh", "issue", "close", str(number), "-R", audit_repo], check=True)
+                  elif state == "open":
+                      subprocess.run(["gh", "issue", "reopen", str(number), "-R", audit_repo], check=True)
+
+          gh = GhBoundIssues()
+
+          # ---- Per-card external lookups for audit_project ----
+          # Reads issue author + linked PR merge state for every card whose
+          # Status warrants the identity-conflict / released-without-merge
+          # checks. Cached by (repo, number) so duplicate lookups are free.
+          _issue_cache = {}
+          _pr_cache = {}
+
+          def lookup_issue_author(repo, number):
+              key = (repo, number)
+              if key in _issue_cache:
+                  return _issue_cache[key]
+              try:
+                  out = subprocess.run(
+                      ["gh", "issue", "view", str(number), "-R", repo, "--json", "author"],
+                      check=True, capture_output=True, text=True,
+                  ).stdout
+                  author = (json.loads(out).get("author") or {}).get("login") or ""
+              except subprocess.CalledProcessError:
+                  author = ""
+              _issue_cache[key] = author
+              return author
+
+          def lookup_linked_prs(repo, number):
+              key = (repo, number)
+              if key in _pr_cache:
+                  return _pr_cache[key]
+              query = """
+              query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) {
+                  issue(number: $number) {
+                    timelineItems(first: 50, itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT]) {
+                      nodes {
+                        ... on CrossReferencedEvent { source { ... on PullRequest { merged baseRefName } } }
+                        ... on ConnectedEvent       { subject { ... on PullRequest { merged baseRefName } } }
+                      }
+                    }
+                  }
+                }
+              }"""
+              owner, name = repo.split("/", 1)
+              try:
+                  out = subprocess.run(
+                      ["gh", "api", "graphql",
+                       "-f", f"query={query}",
+                       "-f", f"owner={owner}", "-f", f"name={name}",
+                       "-F", f"number={number}"],
+                      check=True, capture_output=True, text=True,
+                  ).stdout
+                  data = json.loads(out)
+                  nodes = (((data.get("data") or {}).get("repository") or {}).get("issue") or {})
+                  timeline = (nodes.get("timelineItems") or {}).get("nodes", []) or []
+                  prs = []
+                  for ev in timeline:
+                      pr = ev.get("source") or ev.get("subject") or {}
+                      if not pr:
+                          continue
+                      prs.append({"merged": bool(pr.get("merged")), "base_ref": pr.get("baseRefName") or ""})
+                  _pr_cache[key] = prs
+              except subprocess.CalledProcessError:
+                  _pr_cache[key] = []
+              return _pr_cache[key]
+
+          # ---- Per-project audits ----
+          projects = cfg.get("projects") or []
+          for idx, project_cfg in enumerate(projects):
+              owner = project_cfg["owner"]
+              number = project_cfg["number"]
+              label = project_cfg.get("name") or f"{owner}/{number}"
+
+              snapshot_path = os.path.join(state_dir, f"{owner}-{number}.json")
+              if os.path.exists(snapshot_path):
+                  with open(snapshot_path) as f:
+                      snapshot = json.load(f)
+              else:
+                  print(f"::warning::No snapshot at {snapshot_path} — audit will report empty for {label}.")
+                  snapshot = {"items": {}}
+
+              # Build the external-lookup dicts for items the audit needs them for.
+              issue_authors = {}
+              pr_history = {}
+              for item_id, meta in (snapshot.get("items") or {}).items():
+                  status = (meta.get("fields") or {}).get("Status")
+                  repo = meta.get("source_repo")
+                  num = meta.get("number")
+                  if not repo or not num:
+                      continue
+                  if status in ("QA approved", "Released"):
+                      issue_authors[(repo, num)] = lookup_issue_author(repo, num)
+                  if status == "Released":
+                      pr_history[(repo, num)] = lookup_linked_prs(repo, num)
+
+              findings = audit_project(snapshot, issue_authors=issue_authors, pr_history=pr_history)
+
+              # Run the unmonitored-clone discovery once, on the first iteration,
+              # against the project owner of project 0. The output is per-owner
+              # and we attach it to the first project's audit issue.
+              if idx == 0:
+                  query = """
+                    query($owner: String!) {
+                      organization(login: $owner) {
+                        projectsV2(first: 100, query: "is:open") {
+                          nodes {
+                            id number title url closed
+                            fields(first: 30) {
+                              nodes {
+                                __typename
+                                ... on ProjectV2SingleSelectField { name options { name } }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }"""
+                  try:
+                      out = subprocess.run(
+                          ["gh", "api", "graphql",
+                           "-f", f"owner={owner}",
+                           "-f", f"query={query}"],
+                          check=True, capture_output=True, text=True,
+                      ).stdout
+                      org_data = json.loads(out)
+                      raw_projects = (((org_data.get("data") or {}).get("organization") or {})
+                                      .get("projectsV2") or {}).get("nodes", []) or []
+                  except subprocess.CalledProcessError:
+                      raw_projects = []
+                  org_projects = []
+                  for raw in raw_projects:
+                      options = []
+                      for fld in (raw.get("fields") or {}).get("nodes", []) or []:
+                          if fld.get("__typename") == "ProjectV2SingleSelectField" and fld.get("name") == "Status":
+                              options = [opt["name"] for opt in fld.get("options", []) or []]
+                              break
+                      org_projects.append({
+                          "id": raw.get("id"),
+                          "number": raw.get("number"),
+                          "title": raw.get("title"),
+                          "url": raw.get("url"),
+                          "closed": raw.get("closed"),
+                          "status_options": options,
+                      })
+                  unmonitored = discover_unmonitored(org_projects, cfg)
+              else:
+                  unmonitored = []
+
+              update_audit_issue(gh, label, findings, unmonitored=unmonitored)
+          PY
