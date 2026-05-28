@@ -21,7 +21,10 @@ system_category: critical-trial
 #   5 = custom code (most CCTC repos)
 gamp_category: 5
 
-# UK Clinical Trials Regulations require 25-year retention for trial records.
+# UK CT Regs (as amended by SI 2025/538, in force 28 April 2026) require
+# 25-year retention for trial records on applications submitted on or
+# after that date. Pre-amendment trials remain on the 5-year rule under
+# the 2004 Regs — confirm which regime applies before locking this in.
 retention_years: 25
 
 # Regulatory pillars — clusters of related regulations. The granular

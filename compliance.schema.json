@@ -53,7 +53,7 @@
       "enum": [3, 4, 5]
     },
     "retention_years": {
-      "description": "Minimum retention period in years for data/code held by this system. UK CT Regs require 25 years for trial records.",
+      "description": "Minimum retention period in years for data/code held by this system. UK CT Regs (as amended by SI 2025/538, in force 28 April 2026) require 25 years for trial records on applications submitted on or after that date; pre-amendment trials remain on the 5-year rule under the 2004 Regs.",
       "type": "integer",
       "minimum": 1,
       "maximum": 50

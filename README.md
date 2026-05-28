@@ -374,7 +374,7 @@ same safety floor as `main`/`develop`).
 
 | Rule | Setting | Driver |
 | --- | --- | --- |
-| Require PR | 1+ approving review | ICH E6(R3) §3.16 |
+| Require PR | 1+ approving review | ICH E6(R3) Principle 10 (Roles and Responsibilities) + §3.10 (Quality Management); MHRA GxP-DI segregation of duties |
 | Approver ≠ last pusher | `require_last_push_approval: true` | Segregation of duties |
 | Dismiss stale reviews on push | enabled | Approval reflects the final code, not an earlier version |
 | Code owner review | enabled (no-op if CODEOWNERS is empty) | Routes review to the responsible party as CODEOWNERS is populated |
@@ -426,10 +426,15 @@ driver.
 **Specific to Ruleset A (`cctc-critical-trial`):**
 
 - **CODEOWNERS populated in each `critical-trial` repo.** ICH E6(R3)
-  §3.16 four-eyes review requires PRs to route to a qualified second
-  reviewer. Any developer on the regulated estate who is not the PR
-  author satisfies the regulation; the gap is operational, not a
-  staffing shortage. With zero bypass actors on this ruleset and
+  Principle 10 (Roles and Responsibilities) plus §3.10 (Quality
+  Management), reinforced by MHRA GxP Data Integrity Guidance on
+  segregation of duties, requires PRs to route to a qualified second
+  reviewer. (§3.16 *Data and Records* covers record keeping, audit
+  trails, and retention — it is the right cite for the signing /
+  ALCOA+ control further up the table, not for the four-eyes rule.)
+  Any developer on the regulated estate who is not the PR author
+  satisfies the regulation; the gap is operational, not a staffing
+  shortage. With zero bypass actors on this ruleset and
   code-owner review enabled, an empty CODEOWNERS file means no PR can
   merge — so each `critical-trial` repo needs CODEOWNERS populated to
   a team or reviewer set that excludes the typical PR author. Per-

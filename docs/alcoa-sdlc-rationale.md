@@ -77,9 +77,13 @@ under ICH E6(R3).
   `cctc-regulated-non-critical` — attributability applies to every
   regulated category, not only the GCP-strictest.
 - `require_last_push_approval` and zero bypass actors in
-  `cctc-critical-trial` only — these implement ICH E6(R3) §3.16
-  segregation of duties, which has no direct equivalent in the
-  non-critical regulations.
+  `cctc-critical-trial` only — these implement segregation of duties
+  as required by ICH E6(R3) Principle 10 (Roles and Responsibilities)
+  and §3.10 (Quality Management), reinforced by MHRA GxP Data
+  Integrity Guidance. (ICH E6(R3) §3.16 *Data and Records* covers
+  record keeping and audit trails — relevant to the attributability /
+  signing rule above, not to segregation of duties.) The non-critical
+  regulations have no direct four-eyes equivalent.
 - The decision *not* to require signed commits for repos with
   `system_category == none` — these systems sit outside the chain of
   trust and the control would be unjustified friction.
