@@ -63,7 +63,33 @@ git config --global tag.gpgsign true
 Per-repo (if you only want signing in CCTC repos) — drop `--global`
 and run inside the repo.
 
-### 4. Verify
+### 4. Enable local signature verification
+
+Signing and *verifying* are separate. The config above makes git
+embed an SSH signature in every commit, but `git log --show-signature`
+will still report `No signature` until you tell git which keys it
+should trust. Without this step, GitHub will show **Verified** while
+your local git silently fails to verify.
+
+Create an allowed-signers file mapping your email to your signing
+key (use the email from `git config user.email`):
+
+```bash
+echo "your-email@example.com $(cat ~/.ssh/id_ed25519.pub)" > ~/.ssh/allowed_signers
+git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
+```
+
+Swap `id_ed25519.pub` for whichever key is set as
+`user.signingkey`. The file is one line per identity, so add a line
+for each teammate's key you want to verify locally, or use a glob:
+
+```
+alice@example.com ssh-ed25519 AAAA...alice
+bob@example.com   ssh-ed25519 AAAA...bob
+*@example.com     ssh-ed25519 AAAA...shared-bot
+```
+
+### 5. Verify
 
 Make a commit in any repo, then:
 
@@ -167,7 +193,15 @@ that author still needs to complete the setup above.
 - **"error: gpg failed to sign the data"** with SSH signing — your git
   version is older than 2.34. Upgrade.
 - **GitHub shows "Unverified"** — the commit email does not match a
-  verified email on your GitHub account. See SSH step 4.
+  verified email on your GitHub account. See SSH step 5.
 - **`Verified` shows but with a different name** — the signing key is
   registered against a different GitHub user. Re-export from the right
   account.
+- **GitHub says `Verified` but local `git log --show-signature` prints
+  `No signature`** (often with `error: gpg.ssh.allowedSignersFile needs
+  to be configured and exist for SSH signature verification`) — the
+  commit *is* signed; only your local verification config is missing.
+  Confirm the signature is present with `git cat-file -p HEAD | head -12`
+  (look for `gpgsig -----BEGIN SSH SIGNATURE-----`), then complete SSH
+  step 4. Do **not** work around this with `--no-verify` or by
+  disabling signing — the signature is valid.
