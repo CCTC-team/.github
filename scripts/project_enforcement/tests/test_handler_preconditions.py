@@ -170,6 +170,8 @@ def test_active_mode_honours_bypass_label():
     config = _config("active")
     config["bypass_label"] = "process-override:approved"
 
+    written = []
+
     with patch.dict(
         "project_enforcement.checks.preconditions.PRECONDITIONS",
         {"Risk linked": fake_precondition},
@@ -184,7 +186,7 @@ def test_active_mode_honours_bypass_label():
             state_dir="/tmp/handler-precondition-test",
             fetch_project=lambda o, n: NEW_PROJECT,
             load_snapshot=lambda p: PRIOR,
-            write_snapshot=lambda p, s: None,
+            write_snapshot=lambda p, s: written.append(s),
             checks={},
             actions=actions,
             evidence=evidence,
@@ -194,3 +196,17 @@ def test_active_mode_honours_bypass_label():
     assert actions.field_writes == []
     # Bypass label was cleared so it can't be reused.
     assert (REPO, NUMBER, "process-override:approved") in actions.labels_removed
+    # The precondition path also records the bypass into the snapshot's
+    # audit log, not just the transition-check path. Without this
+    # assertion a future regression in the precondition dispatcher
+    # could silently drop the audit-trail record.
+    assert len(written) == 1
+    saved_events = written[0].get("bypass_events") or []
+    assert len(saved_events) == 1
+    event = saved_events[0]
+    assert event["repo"] == REPO
+    assert event["number"] == NUMBER
+    assert event["item_id"] == ITEM_ID
+    assert event["old_status"] == "Triage"
+    assert event["new_status"] == "Risk linked"
+    assert event["ts"]

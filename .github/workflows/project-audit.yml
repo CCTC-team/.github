@@ -69,11 +69,13 @@ jobs:
           audit_repo = os.environ["AUDIT_REPO"]
 
           # ---- gh wrapper bound to .github so the audit issue lives in this repo ----
+          # Only `find_any` is needed by update_audit_issue; the
+          # open-only variant was dead code.
           class GhBoundIssues:
-              def _list(self, title, state):
+              def find_any(self, title):
                   out = subprocess.run(
                       ["gh", "issue", "list", "-R", audit_repo,
-                       "--state", state, "--limit", "200",
+                       "--state", "all", "--limit", "200",
                        "--search", f'"{title}" in:title',
                        "--json", "number,title,body,state"],
                       check=True, capture_output=True, text=True,
@@ -88,10 +90,6 @@ jobs:
                           i.state = issue["state"].lower()
                           return i
                   return None
-              def find_open(self, title):
-                  return self._list(title, "open")
-              def find_any(self, title):
-                  return self._list(title, "all")
               def create_issue(self, title, body):
                   subprocess.run(
                       ["gh", "issue", "create", "-R", audit_repo,

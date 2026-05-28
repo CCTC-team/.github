@@ -128,6 +128,28 @@ def test_bypass_section_rendered():
     assert "Triage" in body and "QA approved" in body
 
 
+def test_stale_bypass_events_aged_out_at_render_time():
+    """A bypass event older than 30 days must not appear in the body, even
+    if the poller has been paused and not refreshed the snapshot."""
+    gh = FakeGh()
+    old_ts = (
+        __import__("datetime").datetime.now(__import__("datetime").UTC)
+        - __import__("datetime").timedelta(days=45)
+    ).isoformat()
+    stale = [{
+        "ts": old_ts,
+        "repo": "CCTC-team/foo",
+        "number": 11,
+        "item_id": "PVTI_x",
+        "old_status": "Triage",
+        "new_status": "QA approved",
+    }]
+    update_audit_issue(gh, PROJECT_LABEL, [], unmonitored=[], bypass_events=stale)
+    # With nothing else to report and all bypass events aged out, the
+    # rolling issue must not be created.
+    assert gh.issues == []
+
+
 def test_bypass_alone_keeps_issue_open():
     # A bypass with no other findings should still leave the rolling issue open.
     gh = FakeGh()

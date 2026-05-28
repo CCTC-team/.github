@@ -42,12 +42,38 @@ class IssueMeta:
     labels: list[str] = field(default_factory=list)
 
 
+import re
+
+
 # Conclusion values on a check-run that indicate a previous failure
 # the QA precondition should refuse to wave through without a Deviation Ref.
 _FAILED_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "CANCELLED", "STARTUP_FAILURE"}
 
 # Check-run names whose history is recorded for the Deviation Ref gate.
-_TRACKED_CHECK_NAMES = ("gxp-traceability", "compliance", "gate")
+# Matched against name segments split on whitespace, `/`, or `-` to avoid
+# substring false positives like "aggregate-coverage" matching "gate" or
+# "generate-sbom" matching "gate". The check-run name on GitHub is
+# typically rendered as "<workflow> / <job>" where each token is itself
+# `-`-separated; splitting on those characters gives the actual identifiers.
+_TRACKED_CHECK_NAMES = {"gxp-traceability", "compliance", "gate"}
+_NAME_SEGMENT = re.compile(r"[\s/]+")
+
+
+def _check_name_is_tracked(name: str) -> bool:
+    if not name:
+        return False
+    for segment in _NAME_SEGMENT.split(name.strip().lower()):
+        if segment in _TRACKED_CHECK_NAMES:
+            return True
+        # Also accept compound names like "gxp-traceability-gate" by
+        # splitting on `-` for an additional pass — but only against the
+        # multi-word tracked names, not the bare "gate" token. A name
+        # like "aggregate-coverage" must not match "gate" here.
+        sub = segment.split("-")
+        joined = "-".join(sub)
+        if joined in _TRACKED_CHECK_NAMES and joined != "gate":
+            return True
+    return False
 
 
 def _pr_from_graphql(pr: dict, fallback_repo: str) -> "LinkedPR":
@@ -60,11 +86,9 @@ def _pr_from_graphql(pr: dict, fallback_repo: str) -> "LinkedPR":
             authors.append(user["login"])
         for suite in (commit.get("checkSuites") or {}).get("nodes", []) or []:
             for run in (suite.get("checkRuns") or {}).get("nodes", []) or []:
-                name = (run.get("name") or "").lower()
+                name = run.get("name") or ""
                 conclusion = (run.get("conclusion") or "").upper()
-                if conclusion in _FAILED_CONCLUSIONS and any(
-                    tracked in name for tracked in _TRACKED_CHECK_NAMES
-                ):
+                if conclusion in _FAILED_CONCLUSIONS and _check_name_is_tracked(name):
                     failed_history = True
 
     return LinkedPR(
@@ -127,34 +151,68 @@ class GhEvidence:
         if key in self._prs:
             return self._prs[key]
         owner, name = repo.split("/", 1)
-        # The commits/checkSuites/checkRuns walk is heavy but only fires
-        # when a card enters a status that needs it (QA approved /
-        # Released); cached per (repo, issue) for the rest of the run.
-        query = """
-        query($owner: String!, $name: String!, $number: Int!) {
-          repository(owner: $owner, name: $name) {
-            issue(number: $number) {
-              timelineItems(first: 50, itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT]) {
-                nodes {
-                  __typename
-                  ... on CrossReferencedEvent { source { __typename ...prBits } }
-                  ... on ConnectedEvent       { subject { __typename ...prBits } }
+        try:
+            timeline_prs = self._fetch_timeline_prs(owner, name, issue_number)
+            prs: list[LinkedPR] = []
+            for pr_node in timeline_prs:
+                # Paginate the commits walk so PRs with >100 commits do not
+                # silently truncate the failure history. This matters for
+                # long-lived regulated-feature branches.
+                self._paginate_commits(owner, name, pr_node)
+                prs.append(_pr_from_graphql(pr_node, repo))
+            self._prs[key] = prs
+        except subprocess.CalledProcessError:
+            self._prs[key] = []
+        return self._prs[key]
+
+    _TIMELINE_QUERY = """
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        issue(number: $number) {
+          timelineItems(first: 50, itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT]) {
+            nodes {
+              __typename
+              ... on CrossReferencedEvent { source { __typename ...prBits } }
+              ... on ConnectedEvent       { subject { __typename ...prBits } }
+            }
+          }
+        }
+      }
+    }
+    fragment prBits on PullRequest {
+      number state merged mergeCommit { oid } headRefOid baseRefName
+      repository { nameWithOwner }
+      statusCheckRollup { state }
+      commits(first: 100) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          commit {
+            author { user { login } email }
+            checkSuites(first: 20) {
+              nodes {
+                checkRuns(first: 100) {
+                  nodes { name conclusion }
                 }
               }
             }
           }
         }
-        fragment prBits on PullRequest {
-          number state merged mergeCommit { oid } headRefOid baseRefName
-          repository { nameWithOwner }
-          statusCheckRollup { state }
-          commits(last: 100) {
+      }
+    }
+    """
+
+    _COMMITS_PAGE_QUERY = """
+    query($owner: String!, $name: String!, $number: Int!, $cursor: String!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          commits(first: 100, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
             nodes {
               commit {
                 author { user { login } email }
                 checkSuites(first: 20) {
                   nodes {
-                    checkRuns(first: 50) {
+                    checkRuns(first: 100) {
                       nodes { name conclusion }
                     }
                   }
@@ -163,30 +221,53 @@ class GhEvidence:
             }
           }
         }
-        """
-        try:
+      }
+    }
+    """
+
+    def _fetch_timeline_prs(self, owner, name, issue_number):
+        out = subprocess.run(
+            [
+                "gh", "api", "graphql",
+                "-f", f"query={self._TIMELINE_QUERY}",
+                "-f", f"owner={owner}", "-f", f"name={name}",
+                "-F", f"number={issue_number}",
+            ],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        data = json.loads(out)
+        node = (((data.get("data") or {}).get("repository") or {}).get("issue") or {})
+        timeline = (node.get("timelineItems") or {}).get("nodes", []) or []
+        prs = []
+        for ev in timeline:
+            pr = ev.get("source") or ev.get("subject") or {}
+            if pr.get("__typename") == "PullRequest":
+                prs.append(pr)
+        return prs
+
+    def _paginate_commits(self, owner, name, pr_node):
+        commits = pr_node.get("commits") or {}
+        page = commits.get("pageInfo") or {}
+        cursor = page.get("endCursor")
+        nodes = commits.get("nodes") or []
+        while page.get("hasNextPage") and cursor:
             out = subprocess.run(
                 [
                     "gh", "api", "graphql",
-                    "-f", f"query={query}",
+                    "-f", f"query={self._COMMITS_PAGE_QUERY}",
                     "-f", f"owner={owner}", "-f", f"name={name}",
-                    "-F", f"number={issue_number}",
+                    "-F", f"number={pr_node.get('number')}",
+                    "-f", f"cursor={cursor}",
                 ],
                 check=True, capture_output=True, text=True,
             ).stdout
             data = json.loads(out)
-            nodes = (((data.get("data") or {}).get("repository") or {}).get("issue") or {})
-            timeline = (nodes.get("timelineItems") or {}).get("nodes", []) or []
-            prs: list[LinkedPR] = []
-            for ev in timeline:
-                pr = ev.get("source") or ev.get("subject") or {}
-                if pr.get("__typename") != "PullRequest":
-                    continue
-                prs.append(_pr_from_graphql(pr, repo))
-            self._prs[key] = prs
-        except subprocess.CalledProcessError:
-            self._prs[key] = []
-        return self._prs[key]
+            extra = (((data.get("data") or {}).get("repository") or {})
+                     .get("pullRequest") or {}).get("commits") or {}
+            nodes.extend(extra.get("nodes") or [])
+            page = extra.get("pageInfo") or {}
+            cursor = page.get("endCursor")
+        pr_node["commits"] = {"nodes": nodes}
 
     def compliance_yml(self, repo):
         if repo in self._compliance:

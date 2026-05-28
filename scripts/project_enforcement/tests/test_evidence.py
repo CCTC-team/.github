@@ -65,6 +65,37 @@ def test_failing_unrelated_check_does_not_flip_flag():
     assert linked.failed_check_runs_history is False
 
 
+def test_substring_lookalikes_do_not_flip_flag():
+    # The "gate" token must not match "aggregate" or "investigate"; the
+    # "compliance" token must not match a hypothetical "compliance-helper"
+    # by accident; "gxp-traceability" should still match when surrounded
+    # by punctuation.
+    for name in (
+        "aggregate-coverage / report",
+        "investigate-flake / job",
+        "generate-sbom / sign",
+        "compliance-utils / build",  # NOT a tracked check, just adjacent
+        "navigate-to-staging / smoke",
+    ):
+        pr = _pr([{"name": name, "conclusion": "FAILURE"}])
+        linked = _pr_from_graphql(pr, "CCTC-team/sample")
+        assert linked.failed_check_runs_history is False, f"false positive on {name}"
+
+
+def test_tracked_name_matches_through_workflow_separators():
+    # The natural rendering is "<workflow> / <job>"; the job side often is
+    # exactly "gate", and the workflow side is exactly "gxp-traceability".
+    for name in (
+        "gxp-traceability / gate",
+        "GxP-Traceability / Gate",  # case-insensitive
+        "compliance / validate",
+        "Project / gxp-traceability",
+    ):
+        pr = _pr([{"name": name, "conclusion": "FAILURE"}])
+        linked = _pr_from_graphql(pr, "CCTC-team/sample")
+        assert linked.failed_check_runs_history is True, f"missed {name}"
+
+
 def test_cancelled_and_timed_out_count_as_failures():
     pr_cancelled = _pr([{"name": "gxp-traceability / gate", "conclusion": "CANCELLED"}])
     pr_timeout = _pr([{"name": "gxp-traceability / gate", "conclusion": "TIMED_OUT"}])
