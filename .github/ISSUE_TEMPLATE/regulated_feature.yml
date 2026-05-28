@@ -1,5 +1,5 @@
 name: Regulated feature (V&V)
-description: A user requirement / feature for a GCP-regulated build. Captures the risk linkage, URS, and feature tests for full ICH E6 (R3) traceability.
+description: A user requirement / feature for a GxP-regulated build. Captures the risk linkage, URS, and feature tests for full ICH E6 (R3) traceability.
 title: "[Feature]: "
 labels: ["regulated", "validation"]
 body:
@@ -53,7 +53,7 @@ body:
         URL to the `.spec` file holding the User Requirement Specification.
         Must be on the configured default branch and end with `.spec`.
         Parsed by gh-val — keep the label exact.
-      placeholder: "https://github.com/CCTC-team/<repo>/blob/<branch>/user_requirement_specification/features/<n>_<name>.spec"
+      placeholder: "https://github.com/<org>/<repo>/blob/<branch>/user_requirement_specification/<area>/<name>.spec"
     validations:
       required: true
 
@@ -66,8 +66,7 @@ body:
         Must be on the configured default branch and end with `.feature`.
         Parsed by gh-val — keep the label exact.
       placeholder: |
-        https://github.com/CCTC-team/<repo>/blob/<branch>/Feature%20Tests/<area>/<n>_<name>/<id>.<descriptor>.feature
-        https://github.com/CCTC-team/<repo>/blob/<branch>/Feature%20Tests/<area>/<n>_<name>/<id>.<descriptor>.feature
+        https://github.com/<org>/<repo>/blob/<branch>/features/<area>/<name>.feature
     validations:
       required: true
 
