@@ -20,7 +20,7 @@ Don't quietly route around it.
    fine — the inspector wants to see you considered it. Use the PR
    template's "Clinical / compliance checklist".
 3. **Schema or audit-trail changes need a V&V issue.** Open one with
-   [`validation.yml`](https://github.com/CCTC-team/.github/blob/main/.github/ISSUE_TEMPLATE/validation.yml)
+   [`regulated_feature.yml`](https://github.com/CCTC-team/.github/blob/main/.github/ISSUE_TEMPLATE/regulated_feature.yml)
    and link it from the PR. This applies to: database migrations, changes
    to logged fields, changes to electronic signature flow, changes that
    alter what users see or can do.

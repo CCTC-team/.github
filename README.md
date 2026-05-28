@@ -14,7 +14,7 @@ For an overview of CCTC and the software we publish, see the
 | --- | --- |
 | `.github/ISSUE_TEMPLATE/bug_report.yml` | Standard bug-report form |
 | `.github/ISSUE_TEMPLATE/feature_request.yml` | Standard feature-request form |
-| `.github/ISSUE_TEMPLATE/validation.yml` | GCP validation & verification form |
+| `.github/ISSUE_TEMPLATE/regulated_feature.yml` | Regulated feature (V&V) form — populates Risk ID + Requirement ID for the GxP traceability gate |
 | `.github/ISSUE_TEMPLATE/config.yml` | Disables blank issues; adds security + support contact links |
 | `.github/pull_request_template.md` | Default PR template with clinical/compliance checklist |
 | `.github/CODEOWNERS` | Reviewers for this repo (does **not** propagate to other repos) |
@@ -253,7 +253,7 @@ The gate runs on every PR and, for changes that touch in-scope paths
 2. At least one closed issue carries the `regulated` label.
 3. Each regulated-labelled closed issue has non-empty `Risk ID:` and
    `Requirement ID:` lines in its body — populated automatically by
-   the `feature.yml` / `validation.yml` issue templates.
+   the `regulated_feature.yml` issue template.
 
 It does **not** run if:
 
