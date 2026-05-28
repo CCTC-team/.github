@@ -134,24 +134,23 @@ def audit_project(
                     summary=f"{label} is at `Released` with no linked merged PR.",
                 ))
 
-        # _QA_OR_LATER ⊂ _PQ_OR_LATER, so the outer guard is just the
-        # superset; the inner branches apply the narrower QA window.
+        # _QA_OR_LATER ⊂ _PQ_OR_LATER: the outer guard covers both
+        # checklist checks; the QA branch then narrows to the QA window.
         if status in _PQ_OR_LATER:
             body = issue_bodies.get(key)
             if body is not None:
-                if status in _PQ_OR_LATER:
-                    parsed = parse_checklist(body, _PQ_CHECKLIST_HEADER)
-                    unticked = [lbl for lbl, ticked in parsed if not ticked]
-                    if parsed and unticked:
-                        findings.append(Finding(
-                            severity="hard",
-                            category="checklist_unticked",
-                            item_label=label,
-                            summary=(
-                                f"{label} at `{status}` has unticked PQ checklist item(s): "
-                                f"{', '.join(f'`{u}`' for u in unticked)}."
-                            ),
-                        ))
+                parsed = parse_checklist(body, _PQ_CHECKLIST_HEADER)
+                unticked = [lbl for lbl, ticked in parsed if not ticked]
+                if parsed and unticked:
+                    findings.append(Finding(
+                        severity="hard",
+                        category="checklist_unticked",
+                        item_label=label,
+                        summary=(
+                            f"{label} at `{status}` has unticked PQ checklist item(s): "
+                            f"{', '.join(f'`{u}`' for u in unticked)}."
+                        ),
+                    ))
                 if status in _QA_OR_LATER:
                     parsed = parse_checklist(body, _QA_CHECKLIST_HEADER)
                     unticked = [lbl for lbl, ticked in parsed if not ticked]
@@ -306,7 +305,6 @@ def update_audit_issue(gh, project_label: str, findings: list[Finding], *,
 
     ``gh`` is anything that exposes:
         find_any(title) -> issue|None     # any state
-        find_open(title) -> issue|None    # open only
         create_issue(title, body) -> issue
         update_issue(number, body=None, state=None) -> issue
     """

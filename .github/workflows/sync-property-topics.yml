@@ -53,7 +53,11 @@ jobs:
           REPOS: ${{ github.event.inputs.repos }}
         run: |
           if [ -n "$REPOS" ]; then
-            ./scripts/sync-property-topics.sh $REPOS
+            # Split on whitespace into an array so each repo is one positional
+            # arg. Avoids unquoted $REPOS — which would also let shell
+            # metacharacters in the workflow_dispatch input run as code.
+            read -ra REPO_ARR <<< "$REPOS"
+            ./scripts/sync-property-topics.sh "${REPO_ARR[@]}"
           else
             ./scripts/sync-property-topics.sh
           fi

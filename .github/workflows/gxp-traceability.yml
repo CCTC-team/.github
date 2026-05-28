@@ -132,8 +132,13 @@ jobs:
             exit 0
           fi
 
-          # 3. Compute in-scope changes.
-          git fetch --no-tags --depth=1 origin "$HEAD_SHA" >/dev/null 2>&1 || true
+          # 3. Compute in-scope changes. The checkout above pinned us to
+          # base.sha; HEAD_SHA may not be in the local object store yet, so
+          # fetch it explicitly. A failed fetch must be a hard error — if
+          # it were swallowed, `git diff` against a missing object would
+          # also fail under `set -e`, but surfacing the fetch failure
+          # directly makes the cause obvious instead of pointing at diff.
+          git fetch --no-tags --depth=1 origin "$HEAD_SHA"
           git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$STATE_DIR/changed.txt"
           if [ ! -s "$STATE_DIR/changed.txt" ]; then
             echo "No file changes in PR — exiting success."
