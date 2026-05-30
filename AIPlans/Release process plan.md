@@ -247,61 +247,53 @@ Nothing here is built yet; this is the plan only.
 ## Process overview
 
 The three layers (Decision 2) and the build-once RC→production pipeline (Decisions 1, 13, 14)
-fit together as below. **Project 30** tracks each *issue's* lifecycle; a *milestone* bundles the
-issues that make up one version; the *release pipeline* builds that version **once** and promotes
-the single artifact (by digest) through the qualified RC/PQ environment and the authorisation
-gate to production, publishing the Release that finally satisfies the board's `Released` gate.
+fit together as the two diagrams below — **① the Project 30 issue lifecycle** and **② the
+release pipeline** that the milestone triggers. **Project 30** tracks each *issue's* lifecycle;
+a *milestone* bundles the issues that make up one version; the *release pipeline* builds that
+version **once** and promotes the single artifact (by digest) through the qualified RC/PQ
+environment and the authorisation gate to production, publishing the Release that finally
+satisfies the board's `Released` gate (the dashed return arrow from ② back into ①).
+
+**① Project 30 — Regulated Feature Lifecycle (per issue, forward-only):**
+
+```mermaid
+flowchart LR
+    T["Triage"] --> RL["Risk linked"] --> RD["Requirement defined"] --> DV["In development"] --> CR["Code review"] --> VV["V&V tests pass"] --> PQ["PQ review"] --> QA["QA approved"] --> REL["Released"]
+    class QA,REL relhi
+    classDef relhi fill:#dfe9ff,stroke:#3b6ea5,stroke-width:2px
+```
+
+`QA approved` issues that share a milestone feed the pipeline (②); `Released` is reached **only**
+when ② publishes the qualifying Release. (`Redundant` / `Archived` are side-exits reachable from
+any stage, omitted here for clarity.)
+
+**② Release pipeline — build once, promote one digest (milestone → RC → production):**
 
 ```mermaid
 flowchart TB
-    %% ---------- Project 30 board ----------
-    subgraph BOARD["Project 30 · Regulated Feature Lifecycle — per issue (forward-only)"]
-        direction LR
-        T[Triage] --> RL[Risk linked] --> RD[Requirement defined] --> DV[In development] --> CR[Code review] --> VV[V&V tests pass] --> PQc[PQ review] --> QAc[QA approved] --> RELc[Released]
-    end
+    MS["Milestone vX.Y.Z<br/>QA-approved issues = release scope"] == "release manager · workflow_dispatch" ==> A1
 
-    %% ---------- Milestone ----------
-    QAc -. "issue QA-approved<br/>+ PR merged" .-> MS
-    subgraph MS["Milestone vX.Y.Z · release scope (1 milestone = 1 version)"]
-        direction LR
-        I1["#a"]
-        I2["#b"]
-        I3["#c"]
-    end
-
-    MS == "release manager:<br/>workflow_dispatch(milestone)" ==> JOBA
-
-    %% ---------- Release pipeline ----------
-    subgraph PIPE["Release pipeline · build-once, promote one digest"]
+    subgraph JOBA["Job A — PRE-gate · build · validate · stage"]
         direction TB
-        subgraph JOBA["Job A — PRE-gate (build · validate · stage)"]
-            direction TB
-            A1["build ONCE → pack<br/>record SHA-256 digest"] --> A2["sbom → vuln-scan"] --> A3["attest provenance + SBOM<br/>over the digest"] --> A4["validation-docs<br/>(no report ⇒ fail)"] --> A5["deploy:staging → verify:staging<br/>→ functional-tests"]
-        end
-        GATE{{"AUTHORISATION GATE<br/>production Environment · required reviewer<br/>= PQ/QA approver — electronic signature"}}
-        subgraph JOBB["Job B — POST-gate (distribute)"]
-            direction TB
-            Bp["push to registry"] --> Bd["deploy:production → verify:production"] --> Bt["signed tag (git tag -s)<br/>verify signature"] --> Br["publish GitHub Release<br/>+ validation report · SBOM<br/>· provenance · SHA256SUMS"]
-        end
-        A5 --> GATE --> Bp
+        A1["build ONCE → pack<br/>record SHA-256 digest"] --> A2["sbom → vuln-scan"] --> A3["attest provenance + SBOM<br/>over the digest"] --> A4["validation-docs<br/>(no report ⇒ fail)"] --> A5["deploy:staging → verify:staging<br/>→ functional-tests"]
     end
 
-    %% ---------- Environments ----------
-    DEVENV[("dev / integration<br/>nightly · OUT-OF-BAND<br/>not a release path")]
-    RCENV[("RC / PQ<br/>pipeline-only · frozen<br/>production-equivalent")]
-    PRODENV[("production")]
-
-    DV -. "nightly dev builds" .-> DEVENV
-    A5 == "deploy digest" ==> RCENV
+    A5 == "deploy digest" ==> RCENV[("RC / PQ env<br/>pipeline-only · frozen<br/>production-equivalent")]
+    A5 --> GATE{{"AUTHORISATION GATE<br/>production Environment · required reviewer<br/>= PQ/QA approver — electronic signature"}}
     RCENV -. "PQ assessor reviews the EXACT<br/>bytes during the gate pause" .-> GATE
-    Bd == "deploy SAME digest" ==> PRODENV
+    GATE --> Bp
 
-    %% ---------- Close the loop ----------
-    Br == "published Release for merge SHA<br/>+ validation asset" ==> RELG
-    RELG["released.py (hardened):<br/>requires published Release<br/>+ validation asset"] -. "satisfies precondition" .-> RELc
+    subgraph JOBB["Job B — POST-gate · distribute"]
+        direction TB
+        Bp["push to registry"] --> Bd["deploy:production → verify:production"] --> Bt["signed tag (git tag -s)<br/>verify signature"] --> Br["publish GitHub Release<br/>+ validation report · SBOM<br/>· provenance · SHA256SUMS"]
+    end
+
+    Bd == "deploy SAME digest" ==> PRODENV[("production")]
+    DEVENV[("dev / integration<br/>nightly · OUT-OF-BAND")] -. "never reaches RC / prod<br/>(capability separation)" .-> RCENV
+    Br == "published Release for merge SHA + validation asset" ==> RELG["satisfies hardened released.py<br/>⇒ card advances to Released in ①"]
 ```
 
-Notes that the diagram compresses:
+Notes that the diagrams compress:
 
 - **Board `PQ review`/`QA approved` are per-issue, feature-level sign-offs** reached during
   development (against the dev/integration environment). The pipeline's **authorisation gate** is
