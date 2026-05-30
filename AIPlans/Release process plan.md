@@ -190,11 +190,11 @@ Nothing here is built yet; this is the plan only.
 11. **The release contract is a defined set of *logical* build targets, tool-agnostic and
     owned by `claude-org`.** CCTC_Components' FAKE targets are one *implementation*; the
     contract names what every regulated repo's build MUST be able to do, not how. The
-    canonical set (Phase 0) is `clean, restore, build, test, docs, version, publish, pack,
+    canonical set (Phase 0) is `clean, restore, build, lint, test, docs, version, publish, pack,
     push, deploy:staging, verify:staging, functional-tests, tag, deploy:production,
-    verify:production` for **all** software repos, plus `validation-docs` and `sbom` as
-    **additionally mandatory for regulated** (`system_category != none`) repos. Each target
-    has a defined responsibility and declared outputs. *Why:* the user's point exactly — the
+    verify:production, migrate, rollback` for **all** software repos, plus `validation-docs` and
+    `sbom` as **additionally mandatory for regulated** (`system_category != none`) repos. Each
+    target has a defined responsibility and declared outputs. *Why:* the user's point exactly — the
     example must not be hardcoded. A contract lets MSBuild/Cake/npm/Make repos all comply,
     lets the release workflow be written once, and gives inspectors a uniform "every
     regulated system is built and released the same way" story. The spec lives in
@@ -211,10 +211,13 @@ Nothing here is built yet; this is the plan only.
 
 13. **Gating *order* and *digest-pinning* are part of the contract — not left to each
     repo.** The contract (Phase 0) defines not only the target *set* but the mandatory
-    *sequence*: `build → test → sbom → vuln-scan → attest → validation-docs → deploy:staging →
-    verify:staging → functional-tests → (e-signature gate) → push → deploy:production →
-    verify:production → tag → publish Release` (the same order Phase 3a Job A and the Process
-    overview diagram ② encode — they must stay identical). **No distribution step (`push`,
+    *sequence*: `build → lint → test → sbom → vuln-scan → license-scan → attest →
+    validation-docs → deploy:staging (+ migrate) → verify:staging → functional-tests →
+    (e-signature gate) → push → deploy:production (+ migrate) → verify:production → tag →
+    publish Release`, with a defined backout — `rollback` (redeploy the prior released digest;
+    reverse migrations) — on any post-gate verification failure. Phase 3a Job A and the Process
+    overview diagram ② show the gating-critical subset of this sequence in the **same relative
+    order**; this decision and Phase 0 hold the full set, and the three must stay consistent. **No distribution step (`push`,
     `deploy:production`, tag creation, Release publish) may precede validation, scanning, or
     the authorisation gate.** The single built artifact's **digest is the promotion
     carrier**: `deploy:staging`, `deploy:production` and `push` all act on that one artifact,
@@ -268,7 +271,7 @@ satisfies the board's `Released` gate (the dashed return arrow from ② back int
 flowchart LR
     T["Triage"] --> RL["Risk linked"] --> RD["Requirement defined"] --> DV["In development"] --> CR["Code review"] --> VV["V&V tests pass"] --> PQ["PQ review<br/>(feature-level)"] --> QA["QA approved<br/>(feature-level)"] --> REL["Released"]
     class QA,REL relhi
-    classDef relhi fill:#dfe9ff,stroke:#3b6ea5,stroke-width:2px
+    classDef relhi fill:#dfe9ff,stroke:#3b6ea5,stroke-width:2px,color:#3b6ea5
 ```
 
 `QA approved` issues that share a milestone feed the pipeline (②); `Released` is reached **only**
@@ -283,7 +286,7 @@ flowchart TB
 
     subgraph JOBA["Job A — PRE-gate · build · validate · stage"]
         direction TB
-        A1["build ONCE → pack<br/>record SHA-256 digest"] --> A2["sbom → vuln-scan"] --> A3["attest provenance + SBOM<br/>over the digest"] --> A4["validation-docs<br/>(no report ⇒ fail)"] --> A5["deploy:staging → verify:staging<br/>→ functional-tests"]
+        A1["build ONCE → pack<br/>record SHA-256 digest"] --> AL["lint → test"] --> A2["sbom → vuln-scan<br/>→ license-scan"] --> A3["attest provenance + SBOM<br/>over the digest"] --> A4["validation-docs<br/>(no report ⇒ fail)"] --> A5["deploy:staging (+ migrate)<br/>→ verify:staging → functional-tests"]
     end
 
     A5 == "deploy digest" ==> RCENV[("RC / PQ env<br/>pipeline-only · frozen<br/>production-equivalent")]
@@ -293,12 +296,15 @@ flowchart TB
 
     subgraph JOBB["Job B — POST-gate · distribute"]
         direction TB
-        Bp["push to registry"] --> Bd["deploy:production → verify:production"] --> Bt["signed tag (git tag -s)<br/>verify signature"] --> Br["publish GitHub Release<br/>+ validation report · SBOM<br/>· provenance · SHA256SUMS"]
+        Bp["push to registry"] --> Bd["deploy:production (+ migrate)<br/>→ verify:production"] --> Bt["signed tag (git tag -s)<br/>verify signature"] --> Br["publish GitHub Release<br/>+ validation report · SBOM<br/>· provenance · SHA256SUMS"]
     end
 
     Bd == "deploy SAME digest" ==> PRODENV[("production")]
+    Bd -. "verify fails ⇒ backout" .-> RB["rollback:<br/>redeploy prior digest<br/>+ reverse migrations"]
     DEVENV[("dev / integration<br/>nightly · OUT-OF-BAND")] -. "never reaches RC / prod<br/>(capability separation)" .-> RCENV
     Br == "published Release for merge SHA + validation asset" ==> RELG["satisfies the hardened<br/>Released precondition<br/>⇒ card advances to Released in ①"]
+    class MS relhi
+    classDef relhi fill:#dfe9ff,stroke:#3b6ea5,stroke-width:2px,color:#3b6ea5
 ```
 
 Notes that the diagrams compress:
@@ -340,8 +346,9 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     | Target | Responsibility | Required output | Scope |
     |---|---|---|---|
     | `clean` | Remove prior build outputs; re-run-safe | — | all |
-    | `restore` | Restore pinned deps from lockfile | — | all |
+    | `restore` | Restore pinned deps in locked/verified mode; fail on lockfile drift or hash mismatch | — | all |
     | `build` | Compile in Release config | compiled assemblies | all |
+    | `lint` | Static analysis / linters / code-quality gate; fail on violation | analysis report | all |
     | `test` | Run automated tests; fail build on failure | test results | all |
     | `docs` | Generate API/user documentation | docs site | all |
     | `version` | Compute/stamp next version; pin-able via env | version string | all |
@@ -354,9 +361,20 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     | `tag` | Create a **signed**, annotated version tag on the release commit | `v{ver}` tag | all |
     | `deploy:production` | Deploy to production | — | all |
     | `verify:production` | Automated smoke/health checks on production | pass/fail | all |
+    | `migrate` | Apply schema/data migrations for a deploy (forward); declare reversibility | migration log | all (stateful) |
+    | `rollback` | Back out a failed release: redeploy the prior released digest + reverse migrations | — | all |
     | `validation-docs` | Generate validation summary report (URS→V&V→PQ→QA traceability) | declared report path | **regulated** |
     | `sbom` | Generate CycloneDX/SPDX SBOM | declared SBOM path | **regulated** |
 
+  - **Cross-cutting properties (every target, stated once — not per row):** each target MUST be
+    individually invocable, idempotent / re-run-safe, externally version-pinnable (honours
+    `version_pin_env`), and **fail-closed** (a non-zero exit aborts the pipeline).
+  - **Pipeline-native gates that are NOT build targets** (done by the workflow over a target's
+    output, so they stay out of the manifest, like the existing vuln scan): `vuln-scan` and
+    `license-scan` run over the `sbom` output; `attest` (SLSA provenance + SBOM), `checksums`
+    (`SHA256SUMS`), and release-notes generation run over the recorded digest. List them in the
+    canonical *sequence* (Decision 13) but not in the build-target table — they need no per-repo
+    command.
   - State explicitly: the build *tool* is free (FAKE, MSBuild, Cake, npm, Make, …); the
     contract is the obligation, not the implementation. Show CCTC_Components' FAKE chain as
     **one worked example** mapping its target names to the canonical set — clearly labelled
@@ -395,9 +413,14 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
   - Pure function: given a parsed manifest + the repo's `system_category`, return the list of
     missing mandatory targets and any declared target not in the canonical set. Used by the
     release workflow (fail fast) and by `compliance-check` (Phase 6) so a regulated repo that
-    omits `validation-docs`/`sbom`, or never declares `tag`, is flagged. Tests cover: all
-    mandatory present → ok; regulated repo missing `sbom` → flagged; unknown target name →
-    flagged; non-regulated repo without `validation-docs` → ok.
+    omits `validation-docs`/`sbom`, or never declares `tag`/`lint`/`rollback`, is flagged.
+    **`migrate` is conditionally mandatory** — required only for stateful repos, declared by a
+    manifest flag (e.g. `stateful: true`); the exact gating predicate is a refine-later detail,
+    so for now treat `migrate` as required when the flag is set and optional otherwise. Tests
+    cover: all mandatory present → ok; regulated repo missing `sbom` → flagged; repo missing
+    `lint`/`rollback` → flagged; stateful repo missing `migrate` → flagged; stateless repo
+    without `migrate` → ok; unknown target name → flagged; non-regulated repo without
+    `validation-docs` → ok.
 
 - [ ] **0e. MODIFY:** `compliance.schema.json`
   - Add an optional `release_targets_path` (default `.github/release-targets.yml`) so the
@@ -522,24 +545,27 @@ Pure-Python unit, highest design value — write tests first (paired sub-items).
     1. `actions/checkout@v6` at `ref`, `fetch-depth: 0`. Compute `version` (the `version`
        target, or the input) and export it via the manifest's `version_pin_env` so every
        downstream target stamps the **one** released version.
-    2. Run `build` **once**, then `pack`/`publish` (which repackage the once-built output —
-       the contract forbids a recompile). Collect the deployable artifact(s) from declared
-       `outputs`; **record each artifact's SHA-256 digest** as the promotion identity.
+    2. Run `build` **once**, then `lint` and `test` (both fail-closed), then `pack`/`publish`
+       (which repackage the once-built output — the contract forbids a recompile). Collect the
+       deployable artifact(s) from declared `outputs`; **record each artifact's SHA-256 digest**
+       as the promotion identity.
        *This single build is what is deployed, pushed, and attested (Decisions 1, 13).*
     3. Run `sbom` over the built artifact (or fall back to a generic CycloneDX step) →
        collect from declared `outputs`.
     4. Vulnerability scan the SBOM (grype) → `scripts/release/sbom_scan.py`; `active` =
        **fail before any distribution** on critical/high, `evaluate` = `::warning::` +
-       continue.
+       continue. Run `license-scan` over the same SBOM (disallowed-licence policy), same
+       evaluate/active semantics.
     5. `actions/attest-build-provenance` + `actions/attest-sbom` **over the recorded digest**
        — the attestation now covers the exact artifact that will ship.
     6. Run `validation-docs` over the released commit/built artifact; collect the report.
        **Fail if the target fails or the report is empty** — no validation evidence, no
        release. (CCTC_Components satisfies this with getval; the workflow neither knows nor
        cares.) Note this runs **before** any distribution (the inversion fix).
-    7. `deploy:staging` of the recorded artifact → `verify:staging` → `functional-tests`.
-       A failure here stops the release before the gate. (Targets the build *provides*; the
-       pipeline *invokes* them — they no longer live in a standalone build chain.)
+    7. `deploy:staging` of the recorded artifact (applying `migrate` forward as part of the
+       deploy) → `verify:staging` → `functional-tests`. A failure here stops the release before
+       the gate. (Targets the build *provides*; the pipeline *invokes* them — they no longer
+       live in a standalone build chain.)
     8. Upload artifact(s) + digest + SBOM + validation report + notes inputs to the job's
        artifact store for Job B (so Job B distributes the *same* bytes, never a rebuild).
   - **Job B — authorise, then distribute (post-gate, `environment: production`):**
@@ -547,7 +573,9 @@ Pure-Python unit, highest design value — write tests first (paired sub-items).
        electronic release authorisation (Decision 6) — captured: who, UTC timestamp,
        meaning "approved for release".
     10. `push` the recorded package to the registry; `deploy:production` of the **same
-        digest**; `verify:production`.
+        digest** (applying `migrate` forward); `verify:production`. On `verify:production` (or
+        any post-gate) failure, invoke `rollback` — redeploy the prior released digest and
+        reverse migrations — before failing the run.
     11. Create the **signed** tag (`git tag -s v{version}`) on the released commit and push
         it; **verify the signature** before continuing (refuse to publish an unsigned tag).
     12. SHA-256 checksums over every asset → `SHA256SUMS`; build notes via
@@ -765,6 +793,19 @@ build tool.
   `NoBuild = true` (`build.fs:938`) — good; keep that contract (no recompile in `pack`).
   `deployVersionedBuild` (staging *and* production) and `Push` must deploy/push the artifact
   the pipeline built and recorded by digest, not rebuild.
+- [ ] **Expose a `lint` / static-analysis target.** Provide a callable, fail-closed `lint`
+  (e.g. `dotnet format --verify-no-changes` + the project's analyzers/linters); today the FAKE
+  chain has no standalone static-analysis gate distinct from `test`.
+- [ ] **Expose `migrate` for the datastores, with declared reversibility.** CCTC_Components is
+  stateful (SQL Server via EF Core, Neo4j). Provide a callable `migrate` that applies forward
+  schema/data migrations as part of `deploy:*` and declares how each is reversed; mark the repo
+  `stateful: true` in the manifest so `contract.py` requires `migrate`. The pipeline runs it
+  inside the deploy and pairs it with `rollback`. *(Exact migration/rollback strategy per
+  datastore is a refine-later detail.)*
+- [ ] **Expose `rollback` (backout).** Provide a callable `rollback` that redeploys the prior
+  released digest (immutable, attested) and reverses migrations; the pipeline invokes it on any
+  post-gate verification failure. Today there is **no** backout path — a failed prod deploy
+  leaves a partially-distributed release.
 - [ ] **Sign the tag, on the pipeline runner.** `git tag -a` → `git tag -s`
   (`build.fs:979`); provision the signing key on the **GitHub-hosted pipeline runner** (the
   pipeline creates the tag post-gate), not a developer/build box.
@@ -774,7 +815,8 @@ build tool.
   pause isn't mistaken for verification.
 - [ ] **Author the manifest.** Map every FAKE target to the canonical set in
   `.github/release-targets.yml` (from the Phase 0c example), `version_pin_env: CCTC_PIN_VERSION`,
-  marking `push`/`deploy:production`/`tag` as `owner: pipeline`.
+  `stateful: true`, marking `push`/`deploy:production`/`tag`/`migrate`/`rollback` as
+  `owner: pipeline`.
 
 ---
 
@@ -785,9 +827,12 @@ build tool.
   ordering + build-once/digest-promotion rules**. The CCTC_Components mapping is labelled
   "example, not normative" and shows the required re-ordering.
 - [ ] `contract.py` correctly accepts a complete manifest and flags a regulated manifest
-  missing `validation-docs`/`sbom`/`tag`, any unknown target name, a missing
-  `version_pin_env`, and any distribution target (`push`/`deploy:production`/`tag`) marked
-  `owner: build` (the self-distribution regression).
+  missing `validation-docs`/`sbom`/`tag`/`lint`/`rollback`, a `stateful: true` manifest missing
+  `migrate`, any unknown target name, a missing `version_pin_env`, and any distribution target
+  (`push`/`deploy:production`/`tag`) marked `owner: build` (the self-distribution regression).
+- [ ] **Backout proof:** a run seeded with a failing `verify:production` (post-gate) invokes
+  `rollback` — the prior released digest is redeployed and migrations reversed — and the run
+  ends failed without leaving the new version live or published.
 - [ ] **Tool-agnostic proof:** the reusable `release.yml` contains no repo-specific path,
   filename, or build command (no `getval`, no `build/config/...`, no `*.nupkg` literal) —
   every build action reads from `.github/release-targets.yml`. Grep confirms this.
