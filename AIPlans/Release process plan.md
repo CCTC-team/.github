@@ -9,22 +9,37 @@ Project 30/31 "Regulated Feature Lifecycle" board, the `project-enforcement` /
 `project-card-promote` / `project-audit` workflows, and getval validation-doc
 generation in the FAKE build.
 
-What is missing is the *release* half. The build (`~/repos/CCTC_Components/build/build.fs`)
-publishes a NuGet package, pushes an **annotated git tag** `v{ver}` on the merge SHA,
-generates a validation report via getval, and deploys — but it never cuts a **GitHub
-Release**. A git tag is a bare pointer; a Release is the durable, immutable, inspectable
-record that *this exact version was validated and released*, with evidence attached. An
-MHRA inspector's "show me what you released and the evidence it was validated" should be
-answered by one Release page, not by SSH into a server.
+What is missing is the *release* half — but, critically, the *existing* release-adjacent
+steps are also in the wrong order. The build (`~/repos/CCTC_Components/build/build.fs`)
+today runs one linear FAKE chain that deploys to staging, runs functional tests, then
+**packs, pushes the NuGet package to the registry, creates an *unsigned* annotated tag
+(`git tag -a`), generates the validation report, and only then deploys to production**
+(`build.fs:1044-1051`). Three things are wrong with that beyond the missing Release:
+the package is **published to the registry and deployed to production before the
+validation report that is supposed to authorise it even exists**; there is **no
+authorisation gate** anywhere (whoever runs `fake` ships to prod); and the tag is
+created mid-chain, unsigned, before production deploy has even succeeded. A git tag is
+also a bare pointer; a Release is the durable, immutable, inspectable record that *this
+exact version was validated and released*, with evidence attached. An MHRA inspector's
+"show me what you released and the evidence it was validated" should be answered by one
+Release page, not by SSH into a server.
 
-This plan adds a first-class release tier that adopts the full best-practice set:
-GitHub Release creation keyed off the version tag, milestone-scoped release notes +
+So this plan is **not purely additive**: bolting provenance/SBOM/Release onto the current
+chain would attest and "gate" an artifact that has already shipped — provenance theatre.
+The plan therefore (a) adds a first-class release tier *and* (b) **inverts the existing
+order so nothing is distributed before it is validated, scanned, and authorised**, with
+the release artifact built **once** in a hardened runner and **that same artifact**
+promoted to every environment, attested, and published. The best-practice set: a
+build-once CI release pipeline, GitHub Release creation, milestone-scoped release notes +
 traceability matrix, validation summary report attachment, SBOM, SLSA build-provenance
-attestation, checksums/signatures, dependency vulnerability gating, an
-electronic-signature-grade production authorisation gate, a hardened "Released" board
-precondition, `release/*` + tag ruleset confirmation, and the established
-evaluate→active rollout — all delivered as a reusable workflow + thin caller, gated by
-`.compliance.yml`, exactly like the existing compliance machinery.
+attestation over the released digest, checksums/signatures, dependency vulnerability
+gating *before distribution*, an electronic-signature-grade production authorisation gate
+that blocks distribution itself, a hardened "Released" board precondition, `release/*` +
+tag ruleset confirmation, and the established evaluate→active rollout — all delivered as a
+reusable workflow + thin caller, gated by `.compliance.yml`, exactly like the existing
+compliance machinery. Achieving this requires **changes to each repo's existing build**
+(the FAKE chain for CCTC_Components); those are called out explicitly throughout and
+collected in the "Required build changes" section.
 
 Nothing here is built yet; this is the plan only.
 
@@ -39,11 +54,14 @@ Nothing here is built yet; this is the plan only.
   Cake, npm scripts, or Make, with different names and layouts. **Do not hardcode any of
   these into the reusable workflow.** Read it to understand the *fundamental* process; the
   canonical tool-agnostic target set this plan defines is in Phase 0.
-- `~/repos/CCTC_Components/build/build.fs:1018` — the example target chain
-  (`…→ Pack → Push → Tag version in git → Build validation docs → Deploy to Production`),
-  showing one concrete realisation of the canonical targets. The hand-off boundary for the
-  release workflow is the **signed version tag** the build pushes — that boundary is
-  contractual; how the build reaches it is not.
+- `~/repos/CCTC_Components/build/build.fs:1044-1051` — the example target chain
+  (`…→ Pack → Push → Tag version in git → Build validation docs → Deploy to Production`).
+  Read it as a **cautionary** example: it packs, pushes to the registry, tags (unsigned), and
+  deploys to production **before** validation runs and with **no** authorisation gate — the
+  exact inversion this plan removes. The hand-off boundary is **not** a build-pushed tag (the
+  original draft's assumption); it is the **once-built artifact (by digest)** produced by the
+  CI pipeline, which then owns push/deploy/tag post-gate (Decisions 1, 6, 13). What the build
+  must change is collected in "Required build changes".
 - `~/repos/CCTC_Components/build/config/cctc_components_config.json` +
   `build.fs:986` — example getval invocation producing the validation report. The
   *requirement* is "a `validation-docs` target exists and emits a report to a declared
@@ -69,15 +87,30 @@ Nothing here is built yet; this is the plan only.
 
 ## Key Design Decisions
 
-1. **Release is a tag-triggered reusable workflow in CI, not a build-script target.**
-   Each repo's build keeps creating and pushing the signed `v{ver}` tag; the **tag push is
-   the hand-off boundary**. A reusable `release.yml` runs `on: push: tags: ['v*']` on a
-   hardened GitHub-hosted runner. *Why:* SLSA build provenance is only trustworthy when the
-   attestation is minted by a hardened runner with OIDC identity — a statement generated on
-   a developer laptop proves nothing. Folding releases into whatever local build tool a repo
-   uses would forfeit the provenance guarantee. Keeping each repo's deploy pipeline untouched
-   also limits blast radius. The workflow invokes the build's *contractual* targets
-   (Decision 11) by reading a per-repo manifest, never by hardcoded command or path.
+1. **The release is an authoritative *build-once* CI pipeline — not the local build, and
+   not a thin wrapper bolted on after it.** A reusable `release.yml` runs on a hardened
+   GitHub-hosted runner with OIDC identity, builds the distributable **exactly once**, and
+   that **one artifact (identified by its digest)** is what gets scanned, validated,
+   attested, deployed to staging, functionally tested, deployed to production, pushed to the
+   registry, and published as the Release. **Build once, promote the same digest.** *Why:*
+   SLSA provenance is only meaningful when the bytes attested are the bytes shipped. The
+   original draft of this plan rebuilt "for provenance" *alongside* a local build that
+   separately packed, pushed and deployed — so the attestation covered an artifact nobody
+   consumed (the dev build's nupkg went to the registry; the CI rebuild, non-reproducible,
+   was attested). That is provenance theatre. The only honest alternatives are build-once
+   (chosen here) or fully reproducible builds (we do not assume them).
+   - **Consequence for every repo's build:** the build tool is reduced to a set of
+     *callable, idempotent* targets (Decision 11) that the pipeline invokes against a
+     CI-provided version/artifact. **The build MUST NOT itself push to the registry, deploy
+     to production, or create the release tag** — those move under the gated CI pipeline
+     (Decisions 6, 13). A repo may keep a local convenience chain for dev/test environments,
+     but it is **not** a release path. For CCTC_Components this means removing `Pack`/`Push`/
+     `Tag version in git`/`Deploy to Production` from the end-to-end FAKE chain (see
+     "Required build changes"). The workflow invokes each contractual target by reading a
+     per-repo manifest, never by hardcoded command or path.
+   - *Why not fold release into the local build tool:* a statement generated on a developer
+     laptop proves nothing; the provenance guarantee requires the hardened runner. Keeping
+     the build tool-agnostic (Decision 11/12) keeps the pipeline written once for all repos.
 
 2. **Three orthogonal layers: Project board = lifecycle, Milestone = release scope,
    Release = publication.** A regulated issue carries a board *status* (Risk linked →
@@ -98,9 +131,11 @@ Nothing here is built yet; this is the plan only.
    the repo's `validation-docs` target, as the authoritative attached copy.** Rather than
    trusting whatever file a local build left behind, the release job runs the contractual
    `validation-docs` target (CCTC_Components happens to satisfy it with getval; another repo
-   may use a different generator) against the tagged commit, then attaches the report from
-   the path the manifest declares. *Why:* single source of truth, attributable to the exact
-   released SHA — ALCOA+ Attributable + Original — and tool-agnostic.
+   may use a different generator) against the released commit, over the once-built artifact,
+   **before any distribution step (Decision 13)**, then attaches the report from the path the
+   manifest declares. *Why:* single source of truth, attributable to the exact released SHA
+   — ALCOA+ Attributable + Original — and tool-agnostic; and validation must precede release,
+   not document it after the fact.
 
 5. **Provenance and SBOM use GitHub Attestations (sigstore-backed), not self-managed
    cosign keys.** `actions/attest-build-provenance` + `actions/attest-sbom` mint keyless,
@@ -109,13 +144,19 @@ Nothing here is built yet; this is the plan only.
    by an inspector or downstream consumer. SHA-256 checksums are still attached for
    air-gapped verification.
 
-6. **Production release/deploy sits behind a GitHub Environment with required reviewers —
-   this *is* the electronic release authorisation.** A `production` Environment with
-   required reviewers (the PQ/QA approver group) produces a logged, timestamped,
-   attributable approval before the release is marked `latest` / the prod deploy proceeds.
-   *Why:* reuses a platform primitive to satisfy ICH E6(R3) e-signature intent
-   (Attributable + Contemporaneous + meaning="approved for release") instead of building a
-   bespoke flow. The approval event is enduring in the deployment log.
+6. **A GitHub Environment with required reviewers gates *distribution itself* — and this
+   *is* the electronic release authorisation.** The single CI job that performs the
+   irreversible steps — push to the registry, `deploy:production`, publish the Release as
+   `latest` — runs under a `production` Environment with required reviewers (the PQ/QA
+   approver group). The approval is recorded **before** any of those steps run: logged,
+   timestamped (UTC, contemporaneous), attributable, meaning "approved for release",
+   enduring in the deployment log. *Why:* an authorisation that fires *after* the package is
+   already on the registry and in production authorises nothing — which is exactly the
+   current state, where the FAKE chain pushes and deploys with no approval at all. The gate
+   must precede the irreversible steps. Reuses a platform primitive to satisfy ICH E6(R3)
+   e-signature intent instead of building a bespoke flow. **This resolves the previously
+   open question** (was: "should prod deploy move behind the gate or stay build-driven") —
+   it moves behind the gate; the build no longer deploys to production at all (Decision 1).
 
 7. **Dependency vulnerability scan gates the release.** The release job scans the generated
    SBOM (grype against the CycloneDX output) and fails on critical/high before a Release is
@@ -158,11 +199,28 @@ Nothing here is built yet; this is the plan only.
 12. **The build↔workflow binding is a per-repo manifest, not convention.** Each repo
     declares, in `.github/release-targets.yml`, how to invoke each contractual target (the
     command) and where its outputs land (artifact globs, validation-report path, SBOM path),
-    plus the version-pin env var the build honours. The reusable workflow derives the version
-    from the tag ref, reads the manifest, runs the declared target commands in CI, and
-    collects the declared outputs. *Why:* zero hardcoded paths/commands in the shared
-    workflow (Decision 1); a repo changing its build tool only edits its manifest; the
-    manifest is itself machine-checkable against the contract (Phase 0d).
+    plus the version-pin env var the build honours. The reusable workflow computes the
+    version, reads the manifest, runs the declared target commands in CI, and collects the
+    declared outputs. *Why:* zero hardcoded paths/commands in the shared workflow
+    (Decision 1); a repo changing its build tool only edits its manifest; the manifest is
+    itself machine-checkable against the contract (Phase 0d).
+
+13. **Gating *order* and *digest-pinning* are part of the contract — not left to each
+    repo.** The contract (Phase 0) defines not only the target *set* but the mandatory
+    *sequence*: `build → test → validation-docs → sbom → vuln-scan → deploy:staging →
+    verify:staging → functional-tests → (e-signature gate) → push → deploy:production →
+    verify:production → tag → publish Release`. **No distribution step (`push`,
+    `deploy:production`, tag creation, Release publish) may precede validation, scanning, or
+    the authorisation gate.** The single built artifact's **digest is the promotion
+    carrier**: `deploy:staging`, `deploy:production` and `push` all act on that one artifact,
+    and the provenance attestation is over that digest. *Why:* the existing CCTC_Components
+    order (`pack → push → tag → validation-docs → deploy:production`, `build.fs:1044-1051`)
+    publishes and deploys *before* it validates and *with no* authorisation. Canonising the
+    target set without the order would bless that inversion — the exact failure this plan
+    exists to fix. The order is **not** repo-specific, so the reusable workflow encodes it as
+    a fixed step sequence (the workflow *is* the order); the manifest only supplies the
+    per-target commands. `contract.py` (Phase 0d) additionally flags any manifest that marks
+    a distribution target as build-owned/standalone.
 
 ---
 
@@ -201,9 +259,15 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     contract is the obligation, not the implementation. Show CCTC_Components' FAKE chain as
     **one worked example** mapping its target names to the canonical set — clearly labelled
     "example, not normative".
-  - Note which targets the release *workflow* re-invokes in CI for provenance (`build`,
-    `pack`, `publish`, `validation-docs`, `sbom`) vs which the build runs in its own pipeline
-    (`deploy:*`, `verify:*`).
+  - **Document the mandatory ordering and build-once/digest-promotion rules (Decision 13)**,
+    not just the target set: the canonical sequence, that no distribution step may precede
+    validation/scan/authorisation, and that one built artifact (by digest) is promoted to
+    every environment. Show CCTC_Components' required *re-ordering* against its current chain.
+  - Clarify ownership: the release *pipeline* invokes **all** release-path targets in CI
+    (`build`/`pack`/`publish`/`validation-docs`/`sbom`/`deploy:*`/`verify:*`/`push`/`tag`) so
+    one hardened build is attested and promoted; the build *tool* merely *provides* those
+    targets as callable units. Distribution targets (`push`, `deploy:production`, `tag`) are
+    pipeline-owned and post-gate — never run by a standalone local build chain.
   - Register it in `claude-org`'s rules index (the Tier-2 guides table in
     `rules/general.md`) and cross-link from `essentials/regulated-gcp-checklist.md`.
 
@@ -241,9 +305,12 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
   - The three-layer model (Decision 2) with a diagram: Project board status vs Milestone
     vs Release.
   - The end-to-end flow: create milestone `vX.Y.Z` → assign regulated issues at triage →
-    work through board columns → all milestone issues `QA approved` + merged → build pushes
-    signed tag → release workflow cuts the published Release → production environment
-    approval → `latest`.
+    work through board columns → all milestone issues `QA approved` + merged → release manager
+    triggers the pipeline (`workflow_dispatch`, milestone) → pipeline builds **once**, runs
+    validation + SBOM + vuln scan + staging functional tests **(all pre-gate)** → production
+    Environment approval (the e-signature) → pipeline pushes, deploys prod, creates the
+    **signed** tag, and publishes the Release as `latest`. Emphasise the order: **validate and
+    authorise before distribute**.
   - The artifact set attached to every regulated Release and the ICH E6(R3)/ALCOA+ clause
     each one answers (validation report, traceability matrix, SBOM, provenance, checksums,
     authorisation record). Inspector-facing "where is X" table.
@@ -305,69 +372,107 @@ Pure-Python unit, highest design value — write tests first (paired sub-items).
 ## Phase 3: Reusable release workflow
 
 - [ ] **3a. NEW:** `.github/workflows/release.yml` (reusable, `on: workflow_call`)
-  - **Inputs:** `compliance_path` (default `.compliance.yml`), `tag` (the `v*` ref),
-    `milestone` (default: derive from tag), `enforcement` (`evaluate`|`active`, default
-    `evaluate` — controls vuln gate + publish-vs-draft), `environment` (optional, Phase 4).
+  - **Trigger / hand-off boundary (changed from the original draft):** because the build no
+    longer creates the release tag or self-distributes (Decision 1), the pipeline is **not**
+    triggered by a build-pushed `v*` tag. The caller (3b) triggers it on `workflow_dispatch`
+    (release manager picks the milestone) and/or a push to `release/*`. The pipeline **creates
+    the signed tag itself, post-gate** (Job B). *Why:* build-once requires the pipeline to be
+    the builder; a tag pushed by a local build that already packed/pushed/deployed is exactly
+    the inverted flow being removed.
+  - **Inputs:** `compliance_path` (default `.compliance.yml`), `ref` (commit/branch to
+    release, default the default branch), `milestone` (required — the release scope),
+    `version` (optional; else computed by the `version` target), `enforcement`
+    (`evaluate`|`active`, default `evaluate` — controls vuln gate + publish-vs-draft + whether
+    distribution actually runs), `environment` (default `production`, Phase 4).
     **No build-tool, path, or command inputs** — those come from the manifest (Decision 12),
     so the workflow is identical across repos regardless of build tool.
   - **Permissions:** `contents: write`, `id-token: write`, `attestations: write`,
-    `packages: read`, `issues: read`, `pull-requests: read`.
+    `packages: write` (the pipeline now pushes), `issues: read`, `pull-requests: read`.
   - **Gate + contract-check first** (mirror `gxp-traceability.yml` steps 1–2): if no
     `.compliance.yml` or `system_category == none`, exit success. Otherwise load
     `.github/release-targets.yml` (path from `release_targets_path`) and run
-    `scripts/release/contract.py` — **fail fast** if a mandatory target for this
-    `system_category` is missing or undeclared. This is where a repo whose build doesn't meet
-    the contract is caught.
-  - **Steps (in order) — every build action is `manifest.targets.<name>.run`, never a
-    hardcoded command; every artifact is collected from `manifest.targets.<name>.outputs`:**
-    1. `actions/checkout@v6` at the tag ref, `fetch-depth: 0`. Derive `version` from the tag
-       (`v1.4.0` → `1.4.0`) and export it via the manifest's `version_pin_env` so the build
-       targets stamp the exact released version.
-    2. Run the `build` then `pack`/`publish` targets via their manifest `run` commands;
-       collect the deployable artifact(s) from their declared `outputs` globs. *Note:*
-       building here (in the hardened runner) is what the provenance attests (Decision 1).
-    3. Run the `sbom` target (or, if a repo legitimately can't, fall back to a generic
-       CycloneDX step) → collect from declared `outputs`.
+    `scripts/release/contract.py` — **fail fast** if a mandatory target is missing/undeclared
+    **or a distribution target is marked `owner: build`** (the self-distribution check). This
+    is where a repo whose build doesn't meet the contract is caught.
+  - **Two jobs split by the authorisation gate.** Job A (`build-validate`) runs everything up
+    to and including staging validation; Job B (`distribute`) runs under
+    `environment: ${{ inputs.environment }}` so the required-reviewer approval is recorded
+    **before** any distribution. Every build action is `manifest.targets.<name>.run`, never a
+    hardcoded command; every artifact is collected from `manifest.targets.<name>.outputs`.
+  - **Job A — build, validate, scan, stage (pre-gate):**
+    1. `actions/checkout@v6` at `ref`, `fetch-depth: 0`. Compute `version` (the `version`
+       target, or the input) and export it via the manifest's `version_pin_env` so every
+       downstream target stamps the **one** released version.
+    2. Run `build` **once**, then `pack`/`publish` (which repackage the once-built output —
+       the contract forbids a recompile). Collect the deployable artifact(s) from declared
+       `outputs`; **record each artifact's SHA-256 digest** as the promotion identity.
+       *This single build is what is deployed, pushed, and attested (Decisions 1, 13).*
+    3. Run `sbom` over the built artifact (or fall back to a generic CycloneDX step) →
+       collect from declared `outputs`.
     4. Vulnerability scan the SBOM (grype) → `scripts/release/sbom_scan.py`; `active` =
-       fail on critical/high, `evaluate` = `::warning::` + continue.
-    5. `actions/attest-build-provenance` over the collected artifacts; `actions/attest-sbom`
-       over the SBOM.
-    6. Run the `validation-docs` target via its manifest `run` command; collect the report
-       from its declared `outputs` path. Fail the release if the target fails or the report
-       is empty — a release with no validation evidence must not publish. (For CCTC_Components
-       this happens to invoke getval; the workflow neither knows nor cares.)
-    7. SHA-256 checksums over every collected asset → `SHA256SUMS`.
-    8. Build notes via `scripts/release/notes.py` (milestone-scoped + traceability matrix).
-    9. Create the GitHub Release for the tag via `gh release create`, **draft in `evaluate`
-       mode, published in `active` mode**, attaching all collected artifacts: deployable(s),
-       validation report, SBOM, `SHA256SUMS`, and the generated notes. Mark prerelease for
-       a `-rc`/`-beta` tag suffix, else `latest` on publish.
+       **fail before any distribution** on critical/high, `evaluate` = `::warning::` +
+       continue.
+    5. `actions/attest-build-provenance` + `actions/attest-sbom` **over the recorded digest**
+       — the attestation now covers the exact artifact that will ship.
+    6. Run `validation-docs` over the released commit/built artifact; collect the report.
+       **Fail if the target fails or the report is empty** — no validation evidence, no
+       release. (CCTC_Components satisfies this with getval; the workflow neither knows nor
+       cares.) Note this runs **before** any distribution (the inversion fix).
+    7. `deploy:staging` of the recorded artifact → `verify:staging` → `functional-tests`.
+       A failure here stops the release before the gate. (Targets the build *provides*; the
+       pipeline *invokes* them — they no longer live in a standalone build chain.)
+    8. Upload artifact(s) + digest + SBOM + validation report + notes inputs to the job's
+       artifact store for Job B (so Job B distributes the *same* bytes, never a rebuild).
+  - **Job B — authorise, then distribute (post-gate, `environment: production`):**
+    9. The job pauses on the Environment's required reviewers. Their approval is the
+       electronic release authorisation (Decision 6) — captured: who, UTC timestamp,
+       meaning "approved for release".
+    10. `push` the recorded package to the registry; `deploy:production` of the **same
+        digest**; `verify:production`.
+    11. Create the **signed** tag (`git tag -s v{version}`) on the released commit and push
+        it; **verify the signature** before continuing (refuse to publish an unsigned tag).
+    12. SHA-256 checksums over every asset → `SHA256SUMS`; build notes via
+        `scripts/release/notes.py` (milestone-scoped + traceability matrix) with the
+        `## Release authorisation` block filled from the approval record.
+    13. Create the GitHub Release for the tag via `gh release create`, **draft in `evaluate`
+        mode, published + `latest` in `active` mode**, attaching deployable(s), validation
+        report, SBOM, `SHA256SUMS`, and notes. Mark prerelease for a `-rc`/`-beta` suffix.
   - Write a `$GITHUB_STEP_SUMMARY` table of every attached artifact + checksum + attestation
-    status (the inspector-facing manifest).
+    status + the approving reviewer/timestamp (the inspector-facing manifest).
 
 - [ ] **3b. NEW:** `templates/compliance/release-caller.yml`
   - Thin caller shipped as `.github/workflows/release.yml` in the regulated repo:
     ```yaml
     name: Release
     on:
-      push:
-        tags: ['v*']
+      workflow_dispatch:
+        inputs:
+          milestone:
+            description: 'Milestone / release scope (e.g. v1.4.0)'
+            required: true
+      # optional: also trigger on a protected release branch
+      # push:
+      #   branches: ['release/*']
     jobs:
       release:
         permissions:
           contents: write
           id-token: write
           attestations: write
-          packages: read
+          packages: write
           issues: read
           pull-requests: read
         uses: CCTC-team/.github/.github/workflows/release.yml@main
         with:
+          milestone: ${{ inputs.milestone }}
           enforcement: evaluate   # flip to active after one clean cycle
+          environment: production
     ```
   - The caller carries **no repo-specific paths** — all binding is in
-    `.github/release-targets.yml` (Phase 0c). Header comment explains the evaluate→active
-    flip and points at the manifest for build-tool/path configuration.
+    `.github/release-targets.yml` (Phase 0c). Header comment explains: the evaluate→active
+    flip; that in `evaluate` mode Job B still runs but cuts a **draft** Release and skips the
+    real registry push / prod deploy (dry-run) so the team inspects output before any version
+    ships; and points at the manifest for build-tool/path configuration.
 
 ---
 
@@ -376,31 +481,36 @@ Pure-Python unit, highest design value — write tests first (paired sub-items).
 Mostly GitHub configuration + documentation; no app code. Exception to TDD (configuration
 and process, not verifiable logic).
 
-- [ ] **4a. Contract requirement: the `tag` target produces a SIGNED tag.** This is part of
-  the canonical contract (Phase 0a) — every repo's `tag` target must `git tag -s`, not
-  `-a`, so the released version carries the same cryptographic attribution the commit
-  ruleset already requires. The release workflow verifies the tag's signature before
-  publishing.
-  - *Example fix (separate PR to the product repo):* CCTC_Components' `Tag version in git`
-    (`build.fs:979`) currently uses `git tag -a` — change to `git tag -s` and provision the
-    signing key on its build runner. This plan's repo (.github) only documents the
-    requirement; each repo brings its own `tag` target into compliance.
+- [ ] **4a. Contract requirement: the `tag` target produces a SIGNED tag, and the pipeline
+  (not the build) creates it post-gate.** Part of the canonical contract (Phase 0a): the tag
+  is `git tag -s`, not `-a`, so the released version carries the same cryptographic
+  attribution the commit ruleset already requires; and it is created by the pipeline's Job B
+  after the authorisation gate (Decision 13), never by the local build mid-chain. The
+  pipeline verifies the signature before publishing.
+  - *Required build change (see "Required build changes"):* CCTC_Components' `Tag version in
+    git` (`build.fs:979`) currently uses `git tag -a` **and runs inside the FAKE chain before
+    validation and prod deploy**. It must be removed from that chain; if retained at all it
+    becomes a callable `tag` target the pipeline invokes (signed). The signing key is
+    provisioned on the **GitHub-hosted pipeline runner**, not a developer/build box.
 
 - [ ] **4b. NEW:** `docs/release-authorisation.md`
-  - How to configure a `production` GitHub **Environment** with required reviewers (the
+  - How to configure the `production` GitHub **Environment** with required reviewers (the
     PQ/QA approver group), and how that approval is the electronic release authorisation
     (Decision 6): who approved, when (UTC, contemporaneous), meaning ("approved for
     release"), enduring in the deployment log.
-  - The release workflow's publish/`latest` step (or the prod-deploy job) references this
-    environment so the approval is mandatory and logged.
+  - Make explicit that the Environment gates **Job B (distribute)** — the registry push,
+    `deploy:production`, signed tag, and Release publish — so the approval **precedes all
+    irreversible steps**. Contrast with the current FAKE chain, which deploys to production
+    with no approval at all.
   - Maps each property to ICH E6(R3) e-signature expectations from the regulated-gcp
     checklist.
 
 - [ ] **4c. MODIFY:** `.github/workflows/release.yml`
-  - Add an optional `environment` input; when set, the publish/`latest` job runs
-    `environment: ${{ inputs.environment }}` so it blocks on the required reviewers. The
-    release notes' `## Release authorisation` block is filled with the approver identity +
-    UTC timestamp from the deployment record.
+  - Wire Job B with `environment: ${{ inputs.environment }}` (default `production`) so it
+    blocks on the required reviewers before any distribution. The release notes'
+    `## Release authorisation` block is filled with the approver identity + UTC timestamp
+    from the deployment record. In `evaluate` mode Job B runs as a dry-run (draft Release, no
+    real push/prod deploy) so the gate and output can be exercised before going live.
 
 ---
 
@@ -491,13 +601,58 @@ and process, not verifiable logic).
 
 ---
 
+## Required build changes (per-repo; CCTC_Components FAKE as the worked example)
+
+This plan is **not purely additive**. Each regulated repo's build must change so the release
+pipeline (not the build) owns distribution and the build-once/order rules hold. The `.github`
+repo only *documents and enforces* these; each product repo lands them as its own PR. Listed
+against CCTC_Components' `build.fs` as the concrete example — the same shape applies to any
+build tool.
+
+- [ ] **Remove distribution from the end-to-end FAKE chain.** Drop `Pack` /
+  `Push CCTC_Components package` / `Tag version in git` / `Deploy to Production` (and the prod
+  Cloudflare-purge + `Verify production boot`) from the linear `==>` chain
+  (`build.fs:1044-1051`). These become **pipeline-owned, post-gate** steps. The standalone
+  FAKE chain may still build/test/deploy-staging/functional-test for dev use, but it is **not
+  a release path** and must not reach production or the registry.
+- [ ] **Fix the order so nothing distributes before validation.** Today `Build validation
+  docs` (`build.fs:986`) runs *after* `Push` and `Tag`. Under the contract, `validation-docs`
+  (and `sbom`, vuln scan) run **before** any push/deploy/tag — enforced by the pipeline's
+  fixed step order, but the build's targets must be individually invocable so the pipeline can
+  sequence them.
+- [ ] **Make targets callable + idempotent + externally version-pinnable.** Each canonical
+  target must be invocable on its own (FAKE already supports `-t <target>`), re-run-safe, and
+  honour an **external version pin** via env (`version_pin_env`, e.g. `CCTC_PIN_VERSION`).
+  Today the version comes from a `--nextVer` arg computed mid-chain (`build.fs:938,958,979`);
+  it must instead accept the pipeline-supplied version so build/pack/push/deploy all stamp the
+  **one** released version.
+- [ ] **Build once; pack/push/deploy consume that artifact.** `Pack` already uses
+  `NoBuild = true` (`build.fs:938`) — good; keep that contract (no recompile in `pack`).
+  `deployVersionedBuild` (staging *and* production) and `Push` must deploy/push the artifact
+  the pipeline built and recorded by digest, not rebuild.
+- [ ] **Sign the tag, on the pipeline runner.** `git tag -a` → `git tag -s`
+  (`build.fs:979`); provision the signing key on the **GitHub-hosted pipeline runner** (the
+  pipeline creates the tag post-gate), not a developer/build box.
+- [ ] **Acknowledge smoke-vs-functional.** `Pause 30 seconds` + `Verify * boot`
+  (`build.fs:650,683,701`) are liveness smoke checks, not release gates; the functional suite
+  and the e-signature gate are the controls. No code change required — documented so the crude
+  pause isn't mistaken for verification.
+- [ ] **Author the manifest.** Map every FAKE target to the canonical set in
+  `.github/release-targets.yml` (from the Phase 0c example), `version_pin_env: CCTC_PIN_VERSION`,
+  marking `push`/`deploy:production`/`tag` as `owner: pipeline`.
+
+---
+
 ## Verification
 
 - [ ] The build-target contract guide exists in `claude-org`, is registered in the rules
-  index, and lists every canonical target with scope (all vs regulated). The CCTC_Components
-  mapping in it is labelled "example, not normative".
+  index, and lists every canonical target with scope (all vs regulated) **and the mandatory
+  ordering + build-once/digest-promotion rules**. The CCTC_Components mapping is labelled
+  "example, not normative" and shows the required re-ordering.
 - [ ] `contract.py` correctly accepts a complete manifest and flags a regulated manifest
-  missing `validation-docs`/`sbom`/`tag` and any unknown target name.
+  missing `validation-docs`/`sbom`/`tag`, any unknown target name, a missing
+  `version_pin_env`, and any distribution target (`push`/`deploy:production`/`tag`) marked
+  `owner: build` (the self-distribution regression).
 - [ ] **Tool-agnostic proof:** the reusable `release.yml` contains no repo-specific path,
   filename, or build command (no `getval`, no `build/config/...`, no `*.nupkg` literal) —
   every build action reads from `.github/release-targets.yml`. Grep confirms this.
@@ -509,18 +664,29 @@ and process, not verifiable logic).
 - [ ] `scripts/release/` and `scripts/project_enforcement/` unit tests pass
   (`python -m pytest`), including the contract checker, notes-generator, sbom-scan, and
   `published_release_for_sha` regression tests.
-- [ ] End-to-end dry run on the **test** project/repo (Project 31): push a `v0.0.x-rc` tag
-  → release workflow in `evaluate` cuts a **draft** Release with notes + traceability matrix
-  + validation report + SBOM + provenance attestation + `SHA256SUMS` attached; step summary
-  manifest is complete.
-- [ ] `gh attestation verify` succeeds against the produced artifact + SBOM.
+- [ ] End-to-end dry run on the **test** project/repo (Project 31): `workflow_dispatch` with
+  a test milestone → release workflow in `evaluate` builds once, runs validation+SBOM+scan
+  pre-gate, and cuts a **draft** Release with notes + traceability matrix + validation report
+  + SBOM + provenance attestation + `SHA256SUMS` attached, **without** a real registry push or
+  prod deploy; step-summary manifest is complete.
+- [ ] **Build-once / digest proof:** the artifact deployed to staging, the artifact pushed to
+  the registry, the artifact deployed to production, and the artifact the attestation covers
+  all carry the **same SHA-256 digest** — confirming a single build is promoted, not rebuilt
+  per step.
+- [ ] **Order proof:** in a run seeded with a failing validation report (or a critical vuln in
+  `active`), the pipeline fails **before** any push/deploy/tag — no artifact reaches the
+  registry or production.
+- [ ] `gh attestation verify` succeeds against the produced artifact + SBOM, and the verified
+  artifact digest matches the one distributed.
 - [ ] Hardened `released` gate: a card whose issue's PR merged and a **bare tag** exists is
   **not** advanced to Released (regression); the same card after a published Release with
   the validation asset **is** allowed.
 - [ ] Vulnerability gate: a seeded critical advisory fails the release in `active` mode and
   only warns in `evaluate`.
-- [ ] Production-environment approval blocks publish/`latest` until a required reviewer
-  approves, and the approver + UTC timestamp land in the Release's authorisation block.
+- [ ] Production-environment approval blocks **Job B (registry push, prod deploy, tag,
+  publish)** until a required reviewer approves — i.e. the approval precedes all distribution,
+  not just the `latest` flag — and the approver + UTC timestamp land in the Release's
+  authorisation block.
 - [ ] `compliance-drift` dry run shows `.github/release.yml` + the release caller being
   stubbed into a regulated repo and nothing into a `system_category: none` repo.
 - [ ] Tag ruleset confirmed: a published `v*` tag cannot be deleted or moved.
@@ -534,7 +700,10 @@ and process, not verifiable logic).
 - 25-year **enduring/available** archive: export released artifacts (validation report,
   SBOM, provenance) to the CTU QMS/long-term archive of record. GitHub is the working
   store, not the archive (Decision 10).
-- Signed-tag key custody on the build runner (Phase 4a) — raise as a CCTC_Components PR.
-- Decide per-repo whether the production deploy itself (currently in FAKE `Deploy to
-  Production`) should move behind the same GitHub Environment gate, or remain build-driven
-  with the environment gating only the Release publish.
+- Signed-tag key custody on the **pipeline runner** (Phase 4a) — provisioning the signing
+  key for the GitHub-hosted runner that now creates the tag; raise per-repo.
+- Per-repo migration effort to land the "Required build changes" (removing distribution from
+  the FAKE chain, making targets pin-able/idempotent) — tracked as a build PR in each product
+  repo, sequenced after the contract + workflow exist here.
+- *(Resolved, no longer open)* Whether the production deploy moves behind the Environment gate
+  — it does (Decision 6); the build no longer deploys to production.
