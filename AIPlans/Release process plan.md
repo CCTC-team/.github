@@ -244,6 +244,82 @@ Nothing here is built yet; this is the plan only.
 
 ---
 
+## Process overview
+
+The three layers (Decision 2) and the build-once RC→production pipeline (Decisions 1, 13, 14)
+fit together as below. **Project 30** tracks each *issue's* lifecycle; a *milestone* bundles the
+issues that make up one version; the *release pipeline* builds that version **once** and promotes
+the single artifact (by digest) through the qualified RC/PQ environment and the authorisation
+gate to production, publishing the Release that finally satisfies the board's `Released` gate.
+
+```mermaid
+flowchart TB
+    %% ---------- Project 30 board ----------
+    subgraph BOARD["Project 30 · Regulated Feature Lifecycle — per issue (forward-only)"]
+        direction LR
+        T[Triage] --> RL[Risk linked] --> RD[Requirement defined] --> DV[In development] --> CR[Code review] --> VV[V&V tests pass] --> PQc[PQ review] --> QAc[QA approved] --> RELc[Released]
+    end
+
+    %% ---------- Milestone ----------
+    QAc -. "issue QA-approved<br/>+ PR merged" .-> MS
+    subgraph MS["Milestone vX.Y.Z · release scope (1 milestone = 1 version)"]
+        direction LR
+        I1["#a"]
+        I2["#b"]
+        I3["#c"]
+    end
+
+    MS == "release manager:<br/>workflow_dispatch(milestone)" ==> JOBA
+
+    %% ---------- Release pipeline ----------
+    subgraph PIPE["Release pipeline · build-once, promote one digest"]
+        direction TB
+        subgraph JOBA["Job A — PRE-gate (build · validate · stage)"]
+            direction TB
+            A1["build ONCE → pack<br/>record SHA-256 digest"] --> A2["sbom → vuln-scan"] --> A3["attest provenance + SBOM<br/>over the digest"] --> A4["validation-docs<br/>(no report ⇒ fail)"] --> A5["deploy:staging → verify:staging<br/>→ functional-tests"]
+        end
+        GATE{{"AUTHORISATION GATE<br/>production Environment · required reviewer<br/>= PQ/QA approver — electronic signature"}}
+        subgraph JOBB["Job B — POST-gate (distribute)"]
+            direction TB
+            Bp["push to registry"] --> Bd["deploy:production → verify:production"] --> Bt["signed tag (git tag -s)<br/>verify signature"] --> Br["publish GitHub Release<br/>+ validation report · SBOM<br/>· provenance · SHA256SUMS"]
+        end
+        A5 --> GATE --> Bp
+    end
+
+    %% ---------- Environments ----------
+    DEVENV[("dev / integration<br/>nightly · OUT-OF-BAND<br/>not a release path")]
+    RCENV[("RC / PQ<br/>pipeline-only · frozen<br/>production-equivalent")]
+    PRODENV[("production")]
+
+    DV -. "nightly dev builds" .-> DEVENV
+    A5 == "deploy digest" ==> RCENV
+    RCENV -. "PQ assessor reviews the EXACT<br/>bytes during the gate pause" .-> GATE
+    Bd == "deploy SAME digest" ==> PRODENV
+
+    %% ---------- Close the loop ----------
+    Br == "published Release for merge SHA<br/>+ validation asset" ==> RELG
+    RELG["released.py (hardened):<br/>requires published Release<br/>+ validation asset"] -. "satisfies precondition" .-> RELc
+```
+
+Notes that the diagram compresses:
+
+- **Board `PQ review`/`QA approved` are per-issue, feature-level sign-offs** reached during
+  development (against the dev/integration environment). The pipeline's **authorisation gate** is
+  the *release-level* performance qualification against the assembled milestone build on the
+  qualified RC environment (Decision 14) — the human review of the exact bytes that will ship,
+  recorded as the electronic signature (Decision 6). The two are related but distinct: a feature
+  can be `QA approved` on the board long before its milestone is built and qualified for release.
+- **One artifact, one digest** (Decisions 1, 13): the bytes deployed to RC, attested, pushed, and
+  deployed to production are identical. Nightly dev builds never reach RC or production
+  (capability separation, Decision 14).
+- **The loop closes** when Job B publishes the Release: the hardened `released.py` precondition
+  (Phase 5) sees a published Release for the merge SHA with the validation asset attached and
+  only then allows each milestone card to advance to `Released`. In `evaluate` mode Job B is a
+  dry-run (draft Release, no real push/prod deploy), so the gate and output are exercised before
+  any version ships.
+
+---
+
 ## Phase 0: Define the canonical build-target contract (claude-org guidance + manifest)
 
 The foundation. Until the contract exists, the release workflow has nothing tool-agnostic
@@ -328,7 +404,8 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
 
 - [ ] **1a. NEW:** `docs/release-process.md`
   - The three-layer model (Decision 2) with a diagram: Project board status vs Milestone
-    vs Release.
+    vs Release. Reuse/adapt the mermaid flowchart from the "Process overview" section above
+    (board lifecycle → milestone → RC/production pipeline → published Release → `Released` gate).
   - The end-to-end flow: create milestone `vX.Y.Z` → assign regulated issues at triage →
     work through board columns → all milestone issues `QA approved` + merged → release manager
     triggers the pipeline (`workflow_dispatch`, milestone) → pipeline builds **once**, runs
