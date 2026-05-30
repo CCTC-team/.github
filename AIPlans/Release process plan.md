@@ -211,9 +211,10 @@ Nothing here is built yet; this is the plan only.
 
 13. **Gating *order* and *digest-pinning* are part of the contract — not left to each
     repo.** The contract (Phase 0) defines not only the target *set* but the mandatory
-    *sequence*: `build → test → validation-docs → sbom → vuln-scan → deploy:staging →
+    *sequence*: `build → test → sbom → vuln-scan → attest → validation-docs → deploy:staging →
     verify:staging → functional-tests → (e-signature gate) → push → deploy:production →
-    verify:production → tag → publish Release`. **No distribution step (`push`,
+    verify:production → tag → publish Release` (the same order Phase 3a Job A and the Process
+    overview diagram ② encode — they must stay identical). **No distribution step (`push`,
     `deploy:production`, tag creation, Release publish) may precede validation, scanning, or
     the authorisation gate.** The single built artifact's **digest is the promotion
     carrier**: `deploy:staging`, `deploy:production` and `push` all act on that one artifact,
@@ -246,6 +247,13 @@ Nothing here is built yet; this is the plan only.
 
 ## Process overview
 
+> **This is the TARGET end-state — the process once this plan is fully implemented**, not the
+> current behaviour and not an intermediate step. It is the deliberate *inverse* of today's
+> CCTC_Components chain (which packs, pushes, tags and deploys to production **before** it
+> validates and **with no** authorisation gate — see "Context" and Decision 13), shown here as
+> the goal every phase below builds toward. Nothing in these two diagrams exists yet; the phases
+> are what deliver it.
+
 The three layers (Decision 2) and the build-once RC→production pipeline (Decisions 1, 13, 14)
 fit together as the two diagrams below — **① the Project 30 issue lifecycle** and **② the
 release pipeline** that the milestone triggers. **Project 30** tracks each *issue's* lifecycle;
@@ -258,7 +266,7 @@ satisfies the board's `Released` gate (the dashed return arrow from ② back int
 
 ```mermaid
 flowchart LR
-    T["Triage"] --> RL["Risk linked"] --> RD["Requirement defined"] --> DV["In development"] --> CR["Code review"] --> VV["V&V tests pass"] --> PQ["PQ review"] --> QA["QA approved"] --> REL["Released"]
+    T["Triage"] --> RL["Risk linked"] --> RD["Requirement defined"] --> DV["In development"] --> CR["Code review"] --> VV["V&V tests pass"] --> PQ["PQ review<br/>(feature-level)"] --> QA["QA approved<br/>(feature-level)"] --> REL["Released"]
     class QA,REL relhi
     classDef relhi fill:#dfe9ff,stroke:#3b6ea5,stroke-width:2px
 ```
@@ -290,7 +298,7 @@ flowchart TB
 
     Bd == "deploy SAME digest" ==> PRODENV[("production")]
     DEVENV[("dev / integration<br/>nightly · OUT-OF-BAND")] -. "never reaches RC / prod<br/>(capability separation)" .-> RCENV
-    Br == "published Release for merge SHA + validation asset" ==> RELG["satisfies hardened released.py<br/>⇒ card advances to Released in ①"]
+    Br == "published Release for merge SHA + validation asset" ==> RELG["satisfies the hardened<br/>Released precondition<br/>⇒ card advances to Released in ①"]
 ```
 
 Notes that the diagrams compress:
@@ -309,6 +317,12 @@ Notes that the diagrams compress:
   only then allows each milestone card to advance to `Released`. In `evaluate` mode Job B is a
   dry-run (draft Release, no real push/prod deploy), so the gate and output are exercised before
   any version ships.
+- **`verify:staging`/`verify:production` are liveness/smoke checks, not OQ.** Installation and
+  operational qualification (IQ/OQ) of the RC and production environments are an environment-
+  provisioning concern, tracked in "Open operational follow-ups" (RC/production provisioning),
+  not depicted in diagram ②; PQ is the qualification step shown, performed by the assessor at
+  the gate. The milestone + board lifecycle + authorisation gate together constitute the
+  change-control record for the release.
 
 ---
 
