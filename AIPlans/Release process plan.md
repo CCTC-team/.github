@@ -150,8 +150,12 @@ Nothing here is built yet; this is the plan only.
    `latest` — runs under a `production` Environment with required reviewers (the PQ/QA
    approver group). The approval is recorded **before** any of those steps run: logged,
    timestamped (UTC, contemporaneous), attributable, meaning "approved for release",
-   enduring in the deployment log. *Why:* an authorisation that fires *after* the package is
-   already on the registry and in production authorises nothing — which is exactly the
+   enduring in the deployment log. **When the gate opens, the once-built artifact is already
+   live on the qualified RC staging environment (Decision 14) and the validation report exists,
+   so the PQ/QA reviewer performs their qualification review against that exact deployment
+   before approving** — the automated `verify:staging`/`functional-tests` got the artifact *to*
+   the gate; the human PQ review happens *at* it. *Why:* an authorisation that fires *after* the
+   package is already on the registry and in production authorises nothing — which is exactly the
    current state, where the FAKE chain pushes and deploys with no approval at all. The gate
    must precede the irreversible steps. Reuses a platform primitive to satisfy ICH E6(R3)
    e-signature intent instead of building a bespoke flow. **This resolves the previously
@@ -222,6 +226,22 @@ Nothing here is built yet; this is the plan only.
     per-target commands. `contract.py` (Phase 0d) additionally flags any manifest that marks
     a distribution target as build-owned/standalone.
 
+14. **There is exactly one qualified, pipeline-controlled "staging" environment, and it is the
+    release-candidate (RC) / PQ environment — not a shared dev-integration target.**
+    `deploy:staging` deploys the once-built artifact (by digest) to a *production-equivalent*
+    environment that **only the release pipeline writes to**. The artifact stays frozen there
+    from the end of Job A through the authorisation gate, so the PQ assessor reviews the **exact
+    bytes that will ship**. Routine dev/CI deploys (e.g. nightly builds) are **out-of-band**:
+    they target developers' own/ephemeral environments, are explicitly *not* a release path
+    (Decision 1), and never touch the RC environment — so there is **no third always-on
+    environment**, just dev (out-of-band) → RC staging (pipeline-only) → production. *Why:* PQ
+    must run against a qualified, production-equivalent system showing the precise artifact under
+    review (ALCOA+ Original + build-once, Decision 13); a box redeployed nightly is neither
+    qualified nor stable enough to qualify against, and clobbering it mid-review would invalidate
+    the PQ. This is the human counterpart to the *automated* `verify:staging` /
+    `functional-tests`: those gate the artifact **to** the authorisation point; the human PQ/QA
+    review happens **at** it (Decision 6), against the frozen RC deployment.
+
 ---
 
 ## Phase 0: Define the canonical build-target contract (claude-org guidance + manifest)
@@ -246,8 +266,8 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     | `publish` | Produce deployable artifact(s) | declared artifact path(s) | all |
     | `pack` | Package distributable (nupkg/container/zip) | declared package path(s) | all |
     | `push` | Publish package to the registry | — | all |
-    | `deploy:staging` | Deploy to pre-production | — | all |
-    | `verify:staging` | Automated smoke/health checks on staging | pass/fail | all |
+    | `deploy:staging` | Deploy to the qualified release-candidate (RC) / PQ environment | — | all |
+    | `verify:staging` | Automated smoke/health checks on the RC environment | pass/fail | all |
     | `functional-tests` | E2E/functional suite (staging or deterministic sidecar) | results | all |
     | `tag` | Create a **signed**, annotated version tag on the release commit | `v{ver}` tag | all |
     | `deploy:production` | Deploy to production | — | all |
@@ -263,6 +283,11 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     not just the target set: the canonical sequence, that no distribution step may precede
     validation/scan/authorisation, and that one built artifact (by digest) is promoted to
     every environment. Show CCTC_Components' required *re-ordering* against its current chain.
+  - **Document the environment model (Decision 14):** `deploy:staging`/`verify:staging` target
+    the single *qualified, pipeline-controlled* release-candidate (RC) / PQ environment, not a
+    shared dev-integration box; dev/CI deploys (nightly builds) are out-of-band and not a release
+    path. State that the RC deployment is what the PQ assessor reviews during the authorisation
+    gate and must stay frozen until the gate resolves.
   - Clarify ownership: the release *pipeline* invokes **all** release-path targets in CI
     (`build`/`pack`/`publish`/`validation-docs`/`sbom`/`deploy:*`/`verify:*`/`push`/`tag`) so
     one hardened build is attested and promoted; the build *tool* merely *provides* those
@@ -311,6 +336,17 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     Environment approval (the e-signature) → pipeline pushes, deploys prod, creates the
     **signed** tag, and publishes the Release as `latest`. Emphasise the order: **validate and
     authorise before distribute**.
+  - **The environment model and where PQ happens (Decision 14):** three roles, *not* three
+    always-on servers — dev/integration (nightly builds, out-of-band, never a release path),
+    one **qualified release-candidate (RC) / PQ environment** that only the release pipeline
+    writes to, and production. Job A ends with the once-built artifact deployed to the RC
+    environment and the validation report generated; the run then **pauses at the production
+    Environment gate**. That pause is the PQ window: the **human PQ/QA assessor reviews the RC
+    deployment** (the exact bytes that will ship) plus the attached validation report and
+    traceability matrix, then records approval — which unblocks Job B. State plainly that the
+    automated `verify:staging`/`functional-tests` are preconditions that get the artifact *to*
+    the gate, not PQ itself; that the RC environment must stay **frozen** for the review window;
+    and that nightly dev builds must never deploy to it.
   - The artifact set attached to every regulated Release and the ICH E6(R3)/ALCOA+ clause
     each one answers (validation report, traceability matrix, SBOM, provenance, checksums,
     authorisation record). Inspector-facing "where is X" table.
@@ -502,6 +538,12 @@ and process, not verifiable logic).
     `deploy:production`, signed tag, and Release publish — so the approval **precedes all
     irreversible steps**. Contrast with the current FAKE chain, which deploys to production
     with no approval at all.
+  - State that the approver performs their **PQ qualification review against the frozen RC
+    staging deployment (Decision 14)** during the gate pause — the artifact is already live and
+    is the exact build that will ship — before recording approval. Note the operational
+    requirement that the RC environment stay frozen (no nightly/dev redeploys) for the duration
+    of the review, and that GitHub holds the paused run on the required reviewers for up to 30
+    days, bounding the review window.
   - Maps each property to ICH E6(R3) e-signature expectations from the regulated-gcp
     checklist.
 
@@ -613,8 +655,18 @@ build tool.
   `Push CCTC_Components package` / `Tag version in git` / `Deploy to Production` (and the prod
   Cloudflare-purge + `Verify production boot`) from the linear `==>` chain
   (`build.fs:1044-1051`). These become **pipeline-owned, post-gate** steps. The standalone
-  FAKE chain may still build/test/deploy-staging/functional-test for dev use, but it is **not
-  a release path** and must not reach production or the registry.
+  FAKE chain may still build/test/deploy-to-a-*dev*-environment/functional-test for dev use, but
+  it is **not a release path** and must not reach the RC/PQ environment, production, or the
+  registry (next bullet).
+- [ ] **The dev chain must not deploy to the RC/PQ environment; enforce by capability, not
+  policy (Decision 14).** Any dev-convenience `deploy:staging` in the standalone chain targets a
+  *dev/integration* environment, never the qualified RC environment the PQ assessor reviews. The
+  enforcement is **separation by credential**: the RC (and production) deploy secrets/targets
+  exist **only on the GitHub-hosted pipeline runner** (scoped to the release Environments), so a
+  developer or nightly build *cannot* reach the RC environment even by mistake — there is no
+  manual "remember to freeze it" step to fail. For CCTC_Components: `deployVersionedBuild`'s
+  RC/production endpoints and their credentials move to the pipeline runner; the local chain
+  keeps only a dev-environment target (or none).
 - [ ] **Fix the order so nothing distributes before validation.** Today `Build validation
   docs` (`build.fs:986`) runs *after* `Push` and `Tag`. Under the contract, `validation-docs`
   (and `sbom`, vuln scan) run **before** any push/deploy/tag — enforced by the pipeline's
@@ -676,6 +728,9 @@ build tool.
 - [ ] **Order proof:** in a run seeded with a failing validation report (or a critical vuln in
   `active`), the pipeline fails **before** any push/deploy/tag — no artifact reaches the
   registry or production.
+- [ ] **RC isolation proof (Decision 14):** the standalone dev/build chain has no credentials or
+  target for the RC/PQ environment — a dev-run `deploy` cannot reach it (capability separation),
+  and only the pipeline (via the release Environment) can deploy the RC the assessor reviews.
 - [ ] `gh attestation verify` succeeds against the produced artifact + SBOM, and the verified
   artifact digest matches the one distributed.
 - [ ] Hardened `released` gate: a card whose issue's PR merged and a **bare tag** exists is
@@ -702,6 +757,11 @@ build tool.
   store, not the archive (Decision 10).
 - Signed-tag key custody on the **pipeline runner** (Phase 4a) — provisioning the signing
   key for the GitHub-hosted runner that now creates the tag; raise per-repo.
+- **RC/production environment provisioning (Decision 14):** stand up a qualified, production-
+  equivalent RC/PQ environment and scope its deploy credentials (and production's) to the
+  release Environments on the pipeline runner only — so capability separation, not policy,
+  keeps dev/nightly builds out. Per-repo infra task; includes confirming the dev chain's
+  staging target points elsewhere (or is removed).
 - Per-repo migration effort to land the "Required build changes" (removing distribution from
   the FAKE chain, making targets pin-able/idempotent) — tracked as a build PR in each product
   repo, sequenced after the contract + workflow exist here.
