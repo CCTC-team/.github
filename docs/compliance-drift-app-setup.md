@@ -29,7 +29,7 @@ broader:
 | **Repository → Contents** | Read & Write | Commit drift-fix patches to regulated repos |
 | **Repository → Pull requests** | Read & Write | Open the PR carrying the fix |
 | **Repository → Metadata** | Read | Mandatory baseline for any App |
-| **Organization → Custom properties** | Read | List repos where `system_category != none` |
+| **Organization → Custom properties** | Read | List repos where `regulatory_tier != none` |
 
 No webhook events are needed — the workflow polls via the GitHub API
 on a cron, it does not respond to GitHub-pushed events.
@@ -71,7 +71,7 @@ action's `app-id` input is deprecated in v3.
 1. On the App's settings page, **Install App** in the left sidebar.
 2. Click **Install** next to CCTC-team.
 3. Choose **All repositories** (so any future regulated repo is
-   covered automatically; the workflow's `system_category` filter
+   covered automatically; the workflow's `regulatory_tier` filter
    handles which ones get acted on).
 4. Confirm.
 
@@ -102,7 +102,7 @@ in Downloads.
 ### 5. Smoke test
 
 A dry-run kicks the workflow but skips the drift-fix PRs, so it
-exercises App auth + the `system_category` lookup without changing
+exercises App auth + the `regulatory_tier` lookup without changing
 any repo:
 
 ```bash
@@ -147,5 +147,5 @@ on a machine that left your control). To rotate:
   above; install-time changes need a re-acceptance from an org admin
   (GitHub will prompt).
 - **No regulated repos found** in the workflow run → the
-  `system_category` custom property isn't set on any repo, or the
+  `regulatory_tier` custom property isn't set on any repo, or the
   Custom Properties read permission is missing.

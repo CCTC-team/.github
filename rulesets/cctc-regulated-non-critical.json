@@ -16,9 +16,9 @@
     "repository_property": {
       "include": [
         {
-          "name": "system_category",
+          "name": "regulatory_tier",
           "source": "custom",
-          "property_values": ["trial-governance", "personal-data"]
+          "property_values": ["gcp-supporting", "data-protection"]
         }
       ],
       "exclude": []

@@ -39,7 +39,7 @@ linked-PR state) against the **card's source repo**, not against
   issue bodies. The PQ/QA checklist `options:` text is what `- [x] …`
   must match.
 - `README.md` §"Compliance metadata" + §"Branch protection strategy" —
-  authoritative description of `system_category`, `validated_paths`,
+  authoritative description of `regulatory_tier`, `validated_paths`,
   enforcement modes, and the rationale the audit issue should cite.
 - `.github/workflows/compliance-drift.yml` + `scripts/compliance-drift.sh`
   — the established org-wide nightly sweep pattern; copy its

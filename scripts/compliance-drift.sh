@@ -36,7 +36,7 @@ regulated_repos() {
   fi
 
   # GitHub returns repo-by-repo with all set properties. We keep repos
-  # where `system_category` is set to anything other than `none`. The
+  # where `regulatory_tier` is set to anything other than `none`. The
   # `any(.properties[]?; ...)` form yields a single boolean per repo,
   # avoiding fragile per-property emission.
   gh api --paginate "/orgs/$ORG/properties/values" \
@@ -44,7 +44,7 @@ regulated_repos() {
         .[]
         | select(
             any(.properties[]?;
-                .property_name == "system_category"
+                .property_name == "regulatory_tier"
                 and .value != null
                 and .value != "none")
           )

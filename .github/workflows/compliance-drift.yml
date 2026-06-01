@@ -1,6 +1,6 @@
 name: Compliance scaffold drift check
 
-# Nightly audit: finds every org repo with the `system_category` custom
+# Nightly audit: finds every org repo with the `regulatory_tier` custom
 # property set to anything other than `none`, and ensures each one has:
 #
 #   - .github/compliance.schema.json identical to the canonical copy

@@ -4,7 +4,7 @@
   "title": "CCTC Compliance Metadata",
   "description": "Machine-readable regulatory metadata for a CCTC repository. Authoritative source: CCTC-team/.github.",
   "type": "object",
-  "required": ["schema_version", "system_category", "regulatory_pillars", "gamp_category", "last_reviewed"],
+  "required": ["schema_version", "regulatory_tier", "regulatory_pillars", "gamp_category", "last_reviewed"],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -12,9 +12,9 @@
       "type": "integer",
       "minimum": 1
     },
-    "system_category": {
-      "description": "Inspection bucket and validation rigour. Must match the org custom property `system_category` set on this repo.",
-      "enum": ["critical-trial", "trial-governance", "personal-data", "none"]
+    "regulatory_tier": {
+      "description": "Inspection bucket and validation rigour. Must match the org custom property `regulatory_tier` set on this repo.",
+      "enum": ["gcp-critical", "gcp-supporting", "data-protection", "none"]
     },
     "regulatory_pillars": {
       "description": "Which regulatory clusters apply to this repo. Each pillar bundles a set of related regulations — the granular citation register lives in the CTU's QMS / SOPs, not here. An inspector wants to see that you considered each pillar (including the ones you ruled out), not that you enumerated every paragraph of every regulation.",
@@ -59,7 +59,7 @@
       "maximum": 50
     },
     "audit_trail_kind": {
-      "description": "Inspector-readiness: what kind of audit trail this system provides. MHRA Inspectorate expects extractable, immutable trails for critical-trial systems.",
+      "description": "Inspector-readiness: what kind of audit trail this system provides. MHRA Inspectorate expects extractable, immutable trails for gcp-critical systems.",
       "enum": ["extractable", "read-only", "append-only", "none"]
     },
     "account_model": {
@@ -129,7 +129,7 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "system_category": { "const": "critical-trial" } } },
+      "if": { "properties": { "regulatory_tier": { "const": "gcp-critical" } } },
       "then": {
         "properties": {
           "gamp_category": { "enum": [4, 5] },
@@ -141,7 +141,7 @@
       }
     },
     {
-      "if": { "properties": { "system_category": { "const": "trial-governance" } } },
+      "if": { "properties": { "regulatory_tier": { "const": "gcp-supporting" } } },
       "then": {
         "required": ["retention_years"]
       }
