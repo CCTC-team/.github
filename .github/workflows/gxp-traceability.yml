@@ -7,7 +7,7 @@ name: GxP traceability gate (reusable)
 # What it checks (in order):
 #   1. .compliance.yml exists and parses. If absent, this repo isn't
 #      regulated — workflow exits success.
-#   2. system_category != none. If "none", exits success.
+#   2. regulatory_tier != none. If "none", exits success.
 #   3. Compute "in-scope changes" = PR's changed files matching
 #      validated_paths minus exempt_paths. If validated_paths is absent
 #      (older schema_version=1 file), falls back to strict mode where
@@ -113,7 +113,11 @@ jobs:
           with open(os.environ["COMPLIANCE_PATH"]) as f:
               d = yaml.safe_load(f) or {}
           state = {
-              "system_category": d.get("system_category"),
+              # Transitional: read regulatory_tier, falling back to the legacy
+              # system_category key so a repo whose .compliance.yml has not yet
+              # been migrated still gates (rather than silently passing). Drop
+              # the fallback once all consuming manifests are on regulatory_tier.
+              "regulatory_tier": d.get("regulatory_tier") or d.get("system_category"),
               "validated_paths": d.get("validated_paths"),
               "exempt_paths": d.get("exempt_paths") or [],
           }
@@ -121,14 +125,14 @@ jobs:
               json.dump(state, f)
           PY
 
-          system_category=$(/tmp/gate/bin/python <<'PY'
+          regulatory_tier=$(/tmp/gate/bin/python <<'PY'
           import json, os
           with open(os.path.join(os.environ["STATE_DIR"], "compliance.json")) as f:
-              print(json.load(f)["system_category"] or "")
+              print(json.load(f)["regulatory_tier"] or "")
           PY
           )
-          if [ "$system_category" = "none" ] || [ -z "$system_category" ]; then
-            echo "system_category=$system_category — gate not applicable, exiting success."
+          if [ "$regulatory_tier" = "none" ] || [ -z "$regulatory_tier" ]; then
+            echo "regulatory_tier=$regulatory_tier — gate not applicable, exiting success."
             exit 0
           fi
 

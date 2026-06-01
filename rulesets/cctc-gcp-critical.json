@@ -1,5 +1,5 @@
 {
-  "name": "cctc-critical-trial",
+  "name": "cctc-gcp-critical",
   "target": "branch",
   "enforcement": "evaluate",
   "bypass_actors": [],
@@ -15,9 +15,9 @@
     "repository_property": {
       "include": [
         {
-          "name": "system_category",
+          "name": "regulatory_tier",
           "source": "custom",
-          "property_values": ["critical-trial"]
+          "property_values": ["gcp-critical"]
         }
       ],
       "exclude": []

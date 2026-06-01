@@ -3,17 +3,17 @@
 # Compliance metadata for this repository.
 # Canonical schema: CCTC-team/.github/compliance.schema.json
 # Auto-stubbed by the compliance-drift workflow. Review every TODO before
-# merging — the stub assumes a UK academic CTU EDC posture (critical-trial,
+# merging — the stub assumes a UK academic CTU EDC posture (gcp-critical,
 # GAMP 5, no FDA/EMA submission, no EU sites, no clinical decisions).
 
 schema_version: 2
 
-# Must match the `system_category` org custom property set on this repo.
-# - critical-trial    — captures, transforms, or validates trial data
-# - trial-governance  — trial metadata, no patient data (eTMF, CTMS, QMS)
-# - personal-data     — personal data, no trial nexus
-# - none              — pure infrastructure (this file shouldn't exist)
-system_category: critical-trial
+# Must match the `regulatory_tier` org custom property set on this repo.
+# - gcp-critical     — captures, transforms, or validates trial data
+# - gcp-supporting   — trial metadata, no patient data (eTMF, CTMS, QMS)
+# - data-protection  — personal data, no trial nexus
+# - none             — pure infrastructure (this file shouldn't exist)
+regulatory_tier: gcp-critical
 
 # GAMP 5 software category:
 #   3 = off-the-shelf, unconfigured
@@ -39,7 +39,7 @@ regulatory_pillars:
 
   - pillar: mhra-csv-di
     status: in-scope
-    notes: ICH E6 (R3), MHRA GxP-DI, MHRA CSV-for-GCP. Standard for any critical-trial system.
+    notes: ICH E6 (R3), MHRA GxP-DI, MHRA CSV-for-GCP. Standard for any gcp-critical system.
 
   - pillar: infra-security
     status: in-scope
@@ -57,7 +57,7 @@ regulatory_pillars:
     status: out-of-scope
     notes: System captures and stores trial data; does not make or guide clinical decisions.
 
-# Inspector-readiness fields (required for critical-trial). These answer
+# Inspector-readiness fields (required for gcp-critical). These answer
 # the questions an MHRA inspector actually asks. Fill them in honestly —
 # they're a contract with the inspector, not marketing.
 audit_trail_kind: extractable        # extractable | read-only | append-only | none

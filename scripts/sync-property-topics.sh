@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# sync-property-topics.sh — mirror the org-level `system_category` custom
+# sync-property-topics.sh — mirror the org-level `regulatory_tier` custom
 # property onto each repo as a topic pill, so the value is visible on the
 # repo home page (GitHub does not render custom properties there).
 #
 # Behaviour per repo:
-#   - If system_category is unset or "none": ensure no managed topic is present.
+#   - If regulatory_tier is unset or "none": ensure no managed topic is present.
 #   - Otherwise: ensure the matching topic is present, and any other managed
 #     topic (left over from a previous value) is removed.
 #
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 ORG="${ORG:-CCTC-team}"
-PROPERTY="${PROPERTY:-system_category}"
+PROPERTY="${PROPERTY:-regulatory_tier}"
 
 command -v gh >/dev/null || { echo "error: gh CLI not found" >&2; exit 1; }
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }

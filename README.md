@@ -78,10 +78,10 @@ Repos in scope for any UK clinical-trial regulation carry a machine-readable
 `compliance.schema.json`; the drift workflow pushes a copy into each
 regulated repo so the validator can run without cross-repo auth.
 
-### Source of truth: the `system_category` org custom property
+### Source of truth: the `regulatory_tier` org custom property
 
 Whether a repo is regulated — and what inspection bucket it sits in — is
-determined by a **GitHub org-level custom property** named `system_category`,
+determined by a **GitHub org-level custom property** named `regulatory_tier`,
 not by a topic or a file. Topics drift, files can be deleted; a custom
 property is schema-defined and only org admins can change it. Drift
 detection keys off this property.
@@ -109,9 +109,9 @@ considered each one, not that you omitted it.
 
 | Value | Meaning | Examples |
 | --- | --- | --- |
-| `critical-trial` | Captures, transforms, or validates trial data. Full CSV + ALCOA+. | EDC, IRT/randomisation, data-integrity scripts, REDCap External Modules touching data |
-| `trial-governance` | Trial metadata, no patient data. System validation + document retention. | eTMF, CTMS, QMS, project trackers |
-| `personal-data` | Personal data, no trial nexus. UK GDPR / DPA only. | HR-adjacent tooling, contact databases |
+| `gcp-critical` | Captures, transforms, or validates trial data. Full CSV + ALCOA+. | EDC, IRT/randomisation, data-integrity scripts, REDCap External Modules touching data |
+| `gcp-supporting` | Trial metadata, no patient data. System validation + document retention. | eTMF, CTMS, QMS, project trackers |
+| `data-protection` | Personal data, no trial nexus. UK GDPR / DPA only. | HR-adjacent tooling, contact databases |
 | `none` | Pure infrastructure. No `.compliance.yml` expected. | Dev tooling, infra repos |
 
 One-time setup (run as an org admin). Pass JSON via stdin — `gh api -f`
@@ -123,12 +123,12 @@ gh api -X PATCH /orgs/CCTC-team/properties/schema --input - <<'JSON'
 {
   "properties": [
     {
-      "property_name": "system_category",
+      "property_name": "regulatory_tier",
       "value_type": "single_select",
       "required": false,
       "default_value": "none",
       "description": "Inspection bucket and validation rigour for this repo. Specific regulations live in .compliance.yml.",
-      "allowed_values": ["none", "critical-trial", "trial-governance", "personal-data"]
+      "allowed_values": ["none", "gcp-critical", "gcp-supporting", "data-protection"]
     }
   ]
 }
@@ -139,7 +139,7 @@ Verify:
 
 ```bash
 gh api /orgs/CCTC-team/properties/schema \
-  --jq '.[] | select(.property_name == "system_category")'
+  --jq '.[] | select(.property_name == "regulatory_tier")'
 ```
 
 Then set the property on each regulated repo (same JSON-via-stdin pattern):
@@ -149,7 +149,7 @@ gh api -X PATCH /orgs/CCTC-team/properties/values --input - <<'JSON'
 {
   "repository_names": ["some-regulated-repo"],
   "properties": [
-    { "property_name": "system_category", "value": "critical-trial" }
+    { "property_name": "regulatory_tier", "value": "gcp-critical" }
   ]
 }
 JSON
@@ -163,7 +163,7 @@ gh api -X PATCH /orgs/CCTC-team/properties/values --input - <<'JSON'
 {
   "repository_names": ["repo-a", "repo-b", "repo-c"],
   "properties": [
-    { "property_name": "system_category", "value": "critical-trial" }
+    { "property_name": "regulatory_tier", "value": "gcp-critical" }
   ]
 }
 JSON
@@ -272,7 +272,7 @@ The gate runs on every PR and, for changes that touch in-scope paths
 It does **not** run if:
 
 - The repo has no `.compliance.yml` (not regulated).
-- `system_category == none`.
+- `regulatory_tier == none`.
 - The PR's changed-file set, after applying `validated_paths` /
   `exempt_paths`, is empty.
 
@@ -322,7 +322,7 @@ The migration ritual for a breaking change:
 ### How drift correction runs
 
 `compliance-drift.yml` runs nightly. It lists every repo where
-`system_category != none`, clones each, restores any missing or
+`regulatory_tier != none`, clones each, restores any missing or
 out-of-date scaffolding, and opens a PR. **The PR history is the audit
 evidence** — do not squash these into oblivion.
 
@@ -357,7 +357,7 @@ permissions table, smoke test, rotation) live in
 
 Branch protection is enforced via **org-level Rulesets** rather than
 per-repo branch protection. Strictness is driven by the same
-`system_category` custom property that drives compliance drift, so the
+`regulatory_tier` custom property that drives compliance drift, so the
 regulatory bucket decides the rules — not a parallel classification.
 
 ### Baseline (in effect, all repos)
@@ -372,16 +372,16 @@ to muscle-memory, regulated or not.
 
 ### Category-specific
 
-Scoped via `conditions.repository_property` on `system_category`. Two
-rulesets rather than three — `trial-governance` and `personal-data`
+Scoped via `conditions.repository_property` on `regulatory_tier`. Two
+rulesets rather than three — `gcp-supporting` and `data-protection`
 share enough that splitting them adds maintenance without adding
-controls, while `critical-trial` carries hard regulatory hooks
+controls, while `gcp-critical` carries hard regulatory hooks
 (segregation of duties, zero bypass) the others don't.
 
-#### Ruleset A — `cctc-critical-trial`
+#### Ruleset A — `cctc-gcp-critical`
 
-Defined in [`rulesets/cctc-critical-trial.json`](rulesets/cctc-critical-trial.json).
-Scoped to repos with `system_category == critical-trial`. Targets
+Defined in [`rulesets/cctc-gcp-critical.json`](rulesets/cctc-gcp-critical.json).
+Scoped to repos with `regulatory_tier == gcp-critical`. Targets
 `main`, `develop`, and `release/*` (the JSON also re-asserts
 `non_fast_forward` and `deletion` so `release/*` branches inherit the
 same safety floor as `main`/`develop`).
@@ -402,16 +402,16 @@ carry over.
 #### Ruleset B — `cctc-regulated-non-critical`
 
 Defined in [`rulesets/cctc-regulated-non-critical.json`](rulesets/cctc-regulated-non-critical.json).
-Scoped to repos with `system_category in [trial-governance, personal-data]`.
+Scoped to repos with `regulatory_tier in [gcp-supporting, data-protection]`.
 Targets `main`, `develop` (the baseline ruleset already covers
 `non_fast_forward` and `deletion` on the same branches, so this
 ruleset doesn't re-assert them).
 
 | Rule | Setting | Driver |
 | --- | --- | --- |
-| Require PR | 1+ approving review | System validation (`trial-governance`); UK-GDPR Art 5(1)(f) integrity (`personal-data`) |
+| Require PR | 1+ approving review | System validation (`gcp-supporting`); UK-GDPR Art 5(1)(f) integrity (`data-protection`) |
 | Dismiss stale reviews on push | enabled | Cheap uplift over a bare PR-required rule, no regulatory downside |
-| Signed commits | required | UK-GDPR Art 5(1)(f) integrity; ALCOA+ attributability applies across all regulated categories, not just `critical-trial` ([rationale](docs/alcoa-sdlc-rationale.md)) |
+| Signed commits | required | UK-GDPR Art 5(1)(f) integrity; ALCOA+ attributability applies across all regulated categories, not just `gcp-critical` ([rationale](docs/alcoa-sdlc-rationale.md)) |
 
 **Bypass:** `actor_type: OrganizationAdmin` with `bypass_mode: always`.
 GitHub's API rejects `actor_type: "User"` for org-level rulesets
@@ -437,9 +437,9 @@ driver.
   GPG/SSH setup. Developer-facing instructions live in
   [`docs/commit-signing-setup.md`](docs/commit-signing-setup.md).
 
-**Specific to Ruleset A (`cctc-critical-trial`):**
+**Specific to Ruleset A (`cctc-gcp-critical`):**
 
-- **CODEOWNERS populated in each `critical-trial` repo.** ICH E6(R3)
+- **CODEOWNERS populated in each `gcp-critical` repo.** ICH E6(R3)
   Principle 10 (Roles and Responsibilities) plus §3.10 (Quality
   Management), reinforced by MHRA GxP Data Integrity Guidance on
   segregation of duties, requires PRs to route to a qualified second
@@ -450,7 +450,7 @@ driver.
   satisfies the regulation; the gap is operational, not a staffing
   shortage. With zero bypass actors on this ruleset and
   code-owner review enabled, an empty CODEOWNERS file means no PR can
-  merge — so each `critical-trial` repo needs CODEOWNERS populated to
+  merge — so each `gcp-critical` repo needs CODEOWNERS populated to
   a team or reviewer set that excludes the typical PR author. Per-
   repo task, not org-wide.
 
@@ -489,7 +489,7 @@ gh api -X POST /orgs/CCTC-team/rulesets \
   --input rulesets/cctc-regulated-non-critical.json
 
 gh api -X POST /orgs/CCTC-team/rulesets \
-  --input rulesets/cctc-critical-trial.json
+  --input rulesets/cctc-gcp-critical.json
 ```
 
 **Evaluate mode.** GitHub Rulesets support a log-only mode that
@@ -503,7 +503,7 @@ List existing rulesets and find one by name:
 
 ```bash
 gh api /orgs/CCTC-team/rulesets \
-  --jq '.[] | select(.name == "cctc-critical-trial")'
+  --jq '.[] | select(.name == "cctc-gcp-critical")'
 ```
 
 Updating a ruleset later uses `PUT /orgs/CCTC-team/rulesets/{id}`

@@ -21,7 +21,7 @@ The token must carry:
 | --- | --- |
 | `read:project` / `write:project` | Read ProjectV2 fields/items + revert illegal status moves + run the PR-driven promoter |
 | `read:org` (Organization → Members → Read) | Resolve approver-field usernames and discover unmonitored project clones |
-| Organization → Custom properties → Read | Phase 2/6 reads `system_category` to decide which board to enforce on |
+| Organization → Custom properties → Read | Phase 2/6 reads `regulatory_tier` to decide which board to enforce on |
 | Repository → Contents → Read & Write | Read `.compliance.yml` and PR state on regulated repos; commit the `_project-state` snapshot branch |
 | Repository → Issues → Write | Post comments, apply `process-violation`, clear `process-override:approved` |
 | Repository → Pull requests → Read | Resolve `closingIssuesReferences` and check-run status |

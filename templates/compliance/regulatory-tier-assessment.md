@@ -1,14 +1,14 @@
 <!--
-  Proforma for the system-category assessment described in
-  CCTC-team/.github → docs/system-category-questionnaire.md.
+  Proforma for the regulatory-tier assessment described in
+  CCTC-team/.github → docs/regulatory-tier-questionnaire.md.
 
   Purpose. An inspector wants to see the reasoning behind this repo's
-  system_category, GAMP category, and pillar status — not only the
+  regulatory_tier, GAMP category, and pillar status — not only the
   values. The values live in .compliance.yml; the reasoning lives here.
 
   How to use.
    1. Copy this file into the regulated repo as
-      docs/compliance/system-category-assessment.md (or wherever the
+      docs/compliance/regulatory-tier-assessment.md (or wherever the
       repo's `csv_evidence` path points).
    2. Replace every TODO. Leave empty rationale fields empty only when
       the answer is "not applicable" — and say so explicitly.
@@ -21,19 +21,19 @@
   Delete this comment block before committing the filled-in copy.
 -->
 
-# System category assessment — `<repo-name>`
+# Regulatory tier assessment — `<repo-name>`
 
 ## Decision summary
 
 | Field | Value | One-line reason |
 | --- | --- | --- |
-| `system_category` | TODO (`critical-trial` / `trial-governance` / `personal-data` / `none`) | TODO |
+| `regulatory_tier` | TODO (`gcp-critical` / `gcp-supporting` / `data-protection` / `none`) | TODO |
 | `gamp_category` | TODO (`3` / `4` / `5`) | TODO |
 | In-scope pillars | TODO (comma-separated) | TODO |
 | Re-assessment due by | TODO (date = assessment date + `review_cadence_months`) | — |
 
 **Questionnaire version used:** `CCTC-team/.github` →
-`docs/system-category-questionnaire.md` @ `<commit-sha-or-date>`
+`docs/regulatory-tier-questionnaire.md` @ `<commit-sha-or-date>`
 
 **Assessment date:** TODO
 **Assessor:** TODO (name, role)
@@ -42,7 +42,7 @@
 
 ---
 
-## Section A — `system_category` determination
+## Section A — `regulatory_tier` determination
 
 Answer each question in order. Record **Yes** or **No**, the
 **evidence** you relied on (file paths, screenshots, design notes,
@@ -66,7 +66,7 @@ subsequent questions **N/A — earlier question triggered**.
 - **Rationale:** TODO (confirm the absence of participant clinical
   data; if PI/staff personal data is present, note that this is
   governed by the `uk-statutory` pillar and does not flip the
-  category to `personal-data`)
+  category to `data-protection`)
 
 ### A3 — Does the system process personal data with no trial nexus?
 
@@ -84,14 +84,14 @@ subsequent questions **N/A — earlier question triggered**.
 
 ### Conclusion
 
-The first **Yes** above triggered → `system_category` = **TODO**.
+The first **Yes** above triggered → `regulatory_tier` = **TODO**.
 
 ---
 
 ## Section B — `gamp_category` determination
 
 GAMP 5 (ISPE, 2nd edition). The schema accepts `3`, `4`, or `5` —
-infrastructure (Cat 1) is `system_category: none`; Cat 2 was retired
+infrastructure (Cat 1) is `regulatory_tier: none`; Cat 2 was retired
 in GAMP 5 2nd ed.
 
 - **Selected category:** TODO (`3` / `4` / `5`)
@@ -113,7 +113,7 @@ systems. Skip otherwise.
 
 - **Consumers:** TODO (list the repos that import this one)
 - **Strictest consumer category:** TODO
-- **Inherits to:** TODO (this library's `system_category` = strictest
+- **Inherits to:** TODO (this library's `regulatory_tier` = strictest
   consumer's)
 
 ---
@@ -136,9 +136,9 @@ inspector wants to see deliberate exclusion, not silent omission.
 
 ## Section D — Inspector-readiness fields
 
-**Mandatory if `system_category` = `critical-trial`. Recommended
+**Mandatory if `regulatory_tier` = `gcp-critical`. Recommended
 otherwise.** Mark each field N/A with a one-line reason if the
-system category does not require it.
+regulatory tier does not require it.
 
 | Field | Value | Rationale / evidence |
 | --- | --- | --- |
@@ -154,14 +154,14 @@ system category does not require it.
 
 Tick each before the QA reviewer signs.
 
-- [ ] The `system_category` value above matches the org custom
+- [ ] The `regulatory_tier` value above matches the org custom
       property set via `gh api -X PATCH /orgs/CCTC-team/properties/values`.
-- [ ] The `system_category`, `gamp_category`, `regulatory_pillars`,
+- [ ] The `regulatory_tier`, `gamp_category`, `regulatory_pillars`,
       and inspector-readiness values match what's in `.compliance.yml`.
-- [ ] If `system_category` = `critical-trial`, the schema's
+- [ ] If `regulatory_tier` = `gcp-critical`, the schema's
       conditional `allOf` requirements are satisfied (GAMP ∈ {4, 5},
       all five inspector-readiness fields present).
-- [ ] If GAMP = 5 or `system_category` = `critical-trial`, the
+- [ ] If GAMP = 5 or `regulatory_tier` = `gcp-critical`, the
       `csv_evidence` link resolves and the pack covers URS / FS /
       IQ / OQ / PQ + risk assessment.
 - [ ] Any `out-of-scope` pillar carries a `notes` field in

@@ -1,6 +1,6 @@
-# System category questionnaire
+# Regulatory tier questionnaire
 
-A short structured assessment to decide the `system_category` org custom
+A short structured assessment to decide the `regulatory_tier` org custom
 property (and the rest of `.compliance.yml`) for a CCTC repo. Run this
 once when a repo is created, and re-run it at every `review_cadence_months`
 checkpoint or when the system's purpose materially changes.
@@ -13,9 +13,9 @@ CCTC — derived from those sources plus GAMP 5 (ISPE) for the software
 classification.
 
 **Output.** A completed copy of the proforma template at
-[`templates/compliance/system-category-assessment.md`](../templates/compliance/system-category-assessment.md),
+[`templates/compliance/regulatory-tier-assessment.md`](../templates/compliance/regulatory-tier-assessment.md),
 committed to the regulated repo (typically at
-`docs/compliance/system-category-assessment.md`) so its git history
+`docs/compliance/regulatory-tier-assessment.md`) so its git history
 is the audit trail of every reassessment. The four lettered sections
 below each pin down one field of `.compliance.yml`; the proforma
 captures the answer *and* the rationale. An inspector wants to see
@@ -27,12 +27,12 @@ escalate to the sponsor contact.
 
 ---
 
-## Section A — `system_category` (the bucket)
+## Section A — `regulatory_tier` (the bucket)
 
 Answer the questions in order. Stop at the first **Yes**: the
 question that triggers is the category.
 
-### A1 — `critical-trial`?
+### A1 — `gcp-critical`?
 
 Does the system do **any** of the following for an active or planned
 clinical trial?
@@ -48,9 +48,9 @@ clinical trial?
   participant (dose adjustment, eligibility, safety triggers) — note
   this likely also pulls in the `samd-aimd` pillar.
 
-→ **Yes to any → `critical-trial`**. Stop. Go to Section B.
+→ **Yes to any → `gcp-critical`**. Stop. Go to Section B.
 
-### A2 — `trial-governance`?
+### A2 — `gcp-supporting`?
 
 Does the system hold trial **metadata, documents, or governance
 artefacts** without holding identifiable participant clinical data?
@@ -65,9 +65,9 @@ artefacts** without holding identifiable participant clinical data?
   different repo's system. A docs-only repo describing a regulated
   system from outside it is `none` (see row 17 below).
 
-→ **Yes → `trial-governance`**. Stop. Go to Section B.
+→ **Yes → `gcp-supporting`**. Stop. Go to Section B.
 
-### A3 — `personal-data`?
+### A3 — `data-protection`?
 
 Does the system process personal data of any kind (UK-GDPR /
 DPA 2018) **without** a trial nexus?
@@ -76,7 +76,7 @@ DPA 2018) **without** a trial nexus?
 - Mailing lists, contact databases, stakeholder registers.
 - Non-trial research participant contact details (e.g. PPI panels).
 
-→ **Yes → `personal-data`**. Stop. Go to Section B.
+→ **Yes → `data-protection`**. Stop. Go to Section B.
 
 ### A4 — `none`
 
@@ -92,7 +92,7 @@ defaulting to `none`. "I'm not sure" is never `none`.
 ## Section B — `gamp_category` (software classification)
 
 GAMP 5 second edition, ISPE. Only categories 3/4/5 are accepted by
-`compliance.schema.json` (category 1 infrastructure is `system_category:
+`compliance.schema.json` (category 1 infrastructure is `regulatory_tier:
 none`; category 2 was retired in GAMP 5 2nd edition).
 
 Pick the **highest** category that applies — if any custom code exists
@@ -107,9 +107,9 @@ in the repo, the answer is 5 regardless of what the rest is.
 A repo that is "REDCap configuration **plus** a custom External
 Module" is **5** — the EM dominates.
 
-**If Section A landed on `critical-trial`, GAMP 3 is not permitted.**
+**If Section A landed on `gcp-critical`, GAMP 3 is not permitted.**
 The schema's conditional in `compliance.schema.json` restricts
-`critical-trial` repos to GAMP 4 or 5. If a system is genuinely
+`gcp-critical` repos to GAMP 4 or 5. If a system is genuinely
 off-the-shelf with no configuration *and* it captures or validates
 trial data, the configuration was either underestimated (it should
 be 4) or there is custom glue code somewhere (it should be 5) —
@@ -133,7 +133,7 @@ out-of-scope ones still go in `.compliance.yml` with a `notes` field
 | Pillar | Mark in-scope if… | Default for UK academic trial |
 | --- | --- | --- |
 | `uk-statutory` | The work touches UK clinical-trial regulation, UK-GDPR/DPA, NHS-DSPT, HRA transparency, or CAG-S251 | **in-scope** (mandatory) |
-| `mhra-csv-di` | The system is GAMP 4 or 5 and sits in the GCP audit trail | **in-scope** for `critical-trial` and most `trial-governance` |
+| `mhra-csv-di` | The system is GAMP 4 or 5 and sits in the GCP audit trail | **in-scope** for `gcp-critical` and most `gcp-supporting` |
 | `infra-security` | The repo defines hosting, runtime, or has a Cyber Essentials Plus / ISO 27001 obligation under a funder contract | **in-scope** if NIHR/UKRI-funded |
 | `international-ehr-standards` | Trial has an FDA IND, FDA NDA submission exposure, or EMA filing | out-of-scope unless explicitly noted |
 | `eu-ct-regulation` | Trial has any active EU site. CTIS has been mandatory for new EU applications since 31 January 2023; legacy CTD-authorised trials had to complete transition by 31 January 2025. | out-of-scope unless EU sites are recruiting |
@@ -141,9 +141,9 @@ out-of-scope ones still go in `.compliance.yml` with a `notes` field
 
 ---
 
-## Section D — Inspector-readiness fields (`critical-trial` only)
+## Section D — Inspector-readiness fields (`gcp-critical` only)
 
-Required when Section A landed on `critical-trial`. For other
+Required when Section A landed on `gcp-critical`. For other
 categories these are recommended but not schema-enforced.
 
 | Field | Question | Allowed values |
@@ -155,17 +155,17 @@ categories these are recommended but not schema-enforced.
 | `csv_evidence` | Where is the URS / FS / IQ / OQ / PQ + risk assessment pack? | URL or repo path |
 | `requirements.audit_trail` | Is the audit trail a hard requirement, recommended, or n/a? Critical-trial systems have no defensible "n/a" answer. | `required`, `recommended`, `not-applicable` |
 | `requirements.electronic_signatures` | Are e-signatures required (e.g. data lock, IMP accountability, sponsor sign-off)? | `required`, `recommended`, `not-applicable` |
-| `requirements.validation_documentation` | URS / FS / IQ / OQ / PQ pack — required for critical-trial. | `required`, `recommended`, `not-applicable` |
+| `requirements.validation_documentation` | URS / FS / IQ / OQ / PQ pack — required for gcp-critical. | `required`, `recommended`, `not-applicable` |
 | `requirements.change_control` | Formal change control (CAB / change request workflow) or lightweight (PR review only)? | `formal`, `lightweight`, `not-applicable` |
 | `requirements.access_review_frequency` | How often is user access reviewed? | `monthly`, `quarterly`, `biannual`, `annual` |
 
 The `requirements.*` block is mandatory in `.compliance.yml` for
-`critical-trial` repos (the schema's `allOf` requires at least
+`gcp-critical` repos (the schema's `allOf` requires at least
 `audit_trail`, `validation_documentation`, `change_control` to be
 present) — omitting it will fail the validator.
 
 If any of these answers is "I don't know" or "we haven't built it
-yet" — the system is **not yet `critical-trial`-ready**, even if A1
+yet" — the system is **not yet `gcp-critical`-ready**, even if A1
 says it should be. Record the gap, raise it as a regulated issue with
 a Risk ID, and treat the gap as blocking trial go-live.
 
@@ -173,27 +173,27 @@ a Risk ID, and treat the gap as blocking trial go-live.
 
 ## Worked examples
 
-| # | Repo | A | B | C in-scope pillars | `system_category` |
+| # | Repo | A | B | C in-scope pillars | `regulatory_tier` |
 | --- | --- | --- | --- | --- | --- |
-| 1 | In-house EDC for a CTIMP | A1 Yes (capture) | 5 | uk-statutory, mhra-csv-di, infra-security | `critical-trial` |
-| 2 | REDCap External Module that auto-randomises | A1 Yes (algorithm) | 5 | uk-statutory, mhra-csv-di, samd-aimd if it gates eligibility | `critical-trial` |
-| 3 | SQL scripts that verify data integrity across a REDCap in-place upgrade (schema diff + row/checksum reconciliation pre- vs post-upgrade) | A1 Yes (validate) | 5 | uk-statutory, mhra-csv-di, infra-security (partial) | `critical-trial` |
-| 4 | SAS / R statistical pipeline producing CSR tables, listings, figures from locked EDC export | A1 Yes (transform) | 5 | uk-statutory, mhra-csv-di | `critical-trial` |
-| 5 | SDTM/ADaM mapping repo (CDISC derivations) | A1 Yes (transform) | 5 | uk-statutory, mhra-csv-di, international-ehr-standards if FDA filing | `critical-trial` |
-| 6 | Safety-signal detection script that auto-flags SAEs from EDC | A1 Yes (algorithm guides clinical decision) | 5 | uk-statutory, mhra-csv-di, samd-aimd | `critical-trial` |
-| 7 | Read-only monitoring dashboard reading from an EDC, no write path, no derived data feeding the CSR | A1 Yes (transform — see borderline note) | 5 | uk-statutory, mhra-csv-di | `critical-trial` |
-| 8 | Reusable randomisation library imported by multiple trial systems | A1 Yes (transform; library *is* the algorithm) | 5 | uk-statutory, mhra-csv-di | `critical-trial` |
-| 9 | eTMF document store (off-the-shelf SaaS, configured) | A1 No, A2 Yes | 4 | uk-statutory, mhra-csv-di (partial — governance scope only), infra-security | `trial-governance` |
-| 10 | CTMS site/monitoring tracker holding visit dates, no clinical data | A1 No, A2 Yes | 4 | uk-statutory, mhra-csv-di (partial) | `trial-governance` |
-| 11 | QMS / SOP repository (web app holding controlled documents and training records) | A1 No, A2 Yes | 4 or 5 | uk-statutory, mhra-csv-di (partial) | `trial-governance` |
-| 12 | PPI / participant-recruitment portal that captures contact details but no trial enrolment data | A1/A2 No, A3 Yes | 4 or 5 | uk-statutory | `personal-data` |
-| 13 | HR onboarding tracker for CTU staff | A1/A2 No, A3 Yes | 4 | uk-statutory | `personal-data` |
+| 1 | In-house EDC for a CTIMP | A1 Yes (capture) | 5 | uk-statutory, mhra-csv-di, infra-security | `gcp-critical` |
+| 2 | REDCap External Module that auto-randomises | A1 Yes (algorithm) | 5 | uk-statutory, mhra-csv-di, samd-aimd if it gates eligibility | `gcp-critical` |
+| 3 | SQL scripts that verify data integrity across a REDCap in-place upgrade (schema diff + row/checksum reconciliation pre- vs post-upgrade) | A1 Yes (validate) | 5 | uk-statutory, mhra-csv-di, infra-security (partial) | `gcp-critical` |
+| 4 | SAS / R statistical pipeline producing CSR tables, listings, figures from locked EDC export | A1 Yes (transform) | 5 | uk-statutory, mhra-csv-di | `gcp-critical` |
+| 5 | SDTM/ADaM mapping repo (CDISC derivations) | A1 Yes (transform) | 5 | uk-statutory, mhra-csv-di, international-ehr-standards if FDA filing | `gcp-critical` |
+| 6 | Safety-signal detection script that auto-flags SAEs from EDC | A1 Yes (algorithm guides clinical decision) | 5 | uk-statutory, mhra-csv-di, samd-aimd | `gcp-critical` |
+| 7 | Read-only monitoring dashboard reading from an EDC, no write path, no derived data feeding the CSR | A1 Yes (transform — see borderline note) | 5 | uk-statutory, mhra-csv-di | `gcp-critical` |
+| 8 | Reusable randomisation library imported by multiple trial systems | A1 Yes (transform; library *is* the algorithm) | 5 | uk-statutory, mhra-csv-di | `gcp-critical` |
+| 9 | eTMF document store (off-the-shelf SaaS, configured) | A1 No, A2 Yes | 4 | uk-statutory, mhra-csv-di (partial — governance scope only), infra-security | `gcp-supporting` |
+| 10 | CTMS site/monitoring tracker holding visit dates, no clinical data | A1 No, A2 Yes | 4 | uk-statutory, mhra-csv-di (partial) | `gcp-supporting` |
+| 11 | QMS / SOP repository (web app holding controlled documents and training records) | A1 No, A2 Yes | 4 or 5 | uk-statutory, mhra-csv-di (partial) | `gcp-supporting` |
+| 12 | PPI / participant-recruitment portal that captures contact details but no trial enrolment data | A1/A2 No, A3 Yes | 4 or 5 | uk-statutory | `data-protection` |
+| 13 | HR onboarding tracker for CTU staff | A1/A2 No, A3 Yes | 4 | uk-statutory | `data-protection` |
 | 14 | Public-facing study website (study description only, no forms, no PID) | A1–A3 all No | 3 or 4 | none | `none` |
 | 15 | Terraform repo provisioning self-hosted runners | A1–A3 all No | n/a | infra-security only (org-level, not repo-level scope) | `none` |
 | 16 | CI/CD workflow templates for a regulated app, stored in a separate repo | A1–A3 all No (template only; the regulated app's own CI is in-scope) | n/a | none | `none` |
-| 17 | Documentation-only repo describing a `critical-trial` system | A1–A3 all No (docs are validated artefacts of the *other* repo, not this one) | n/a | none | `none` |
-| 18 | Bespoke sample chain-of-custody tool reconciling two sources (e.g. EDC "sample taken" vs LIMS "sample received") to flag outstanding samples | A1 Yes (validate — cross-source reconciliation of trial data) | 5 | uk-statutory (incl. Human Tissue Act note), mhra-csv-di, infra-security | `critical-trial` |
-| 19 | Bespoke site-status dashboard: ingests trial metadata from ClinicalTrials.gov, lets authenticated sponsor staff and site PIs record whether each site is open for recruitment | A1 No (no participant data, no clinical decision), A2 Yes (site activation metadata) | 5 | uk-statutory, mhra-csv-di (partial — governance scope), infra-security; add `international-ehr-standards` if any of the listed trials carry FDA/EMA exposure | `trial-governance` |
+| 17 | Documentation-only repo describing a `gcp-critical` system | A1–A3 all No (docs are validated artefacts of the *other* repo, not this one) | n/a | none | `none` |
+| 18 | Bespoke sample chain-of-custody tool reconciling two sources (e.g. EDC "sample taken" vs LIMS "sample received") to flag outstanding samples | A1 Yes (validate — cross-source reconciliation of trial data) | 5 | uk-statutory (incl. Human Tissue Act note), mhra-csv-di, infra-security | `gcp-critical` |
+| 19 | Bespoke site-status dashboard: ingests trial metadata from ClinicalTrials.gov, lets authenticated sponsor staff and site PIs record whether each site is open for recruitment | A1 No (no participant data, no clinical decision), A2 Yes (site activation metadata) | 5 | uk-statutory, mhra-csv-di (partial — governance scope), infra-security; add `international-ehr-standards` if any of the listed trials carry FDA/EMA exposure | `gcp-supporting` |
 
 ---
 
@@ -213,7 +213,7 @@ output of these scripts is the evidence the sponsor relies on to say
 the upgrade was safe; if the scripts are wrong, a silent data
 corruption can be signed off as clean. They are also bespoke SQL
 (GAMP 5), and they directly inform a GCP decision (whether to release
-the upgrade to production). Treat them as `critical-trial`, version
+the upgrade to production). Treat them as `gcp-critical`, version
 them under the same ruleset as the EDC, and tie each script to a
 Risk ID + Requirement ID via the traceability gate. The schema diff
 script in particular ("what tables and columns are added") is also
@@ -221,25 +221,25 @@ upgrade-validation evidence — keep its output as part of the CSV
 pack for that REDCap version bump.
 
 **#7 — Read-only EDC dashboard.** "Read-only" feels safer than the
-underlying EDC and tempts a `trial-governance` answer. Resist it.
+underlying EDC and tempts a `gcp-supporting` answer. Resist it.
 Anything that *displays* trial data to a decision-maker is part of
 the data lifecycle the MHRA inspects: an incorrect aggregation, a
 silently-dropped row, or a stale cache can mislead a DMC or trial
 manager just as effectively as a write-path bug. If the dashboard's
 output is ever used to make a clinical, safety, or trial-conduct
-decision, it is `critical-trial`. If it is genuinely operational
+decision, it is `gcp-critical`. If it is genuinely operational
 (server uptime, login counts), it is not — but document the carve-out.
 
 **#8 — Shared randomisation library.** A library has no users of its
 own, only consumers. Classify it by the *strictest* category any
 consumer requires. A randomisation library used by even one CTIMP is
-`critical-trial`, and downgrading it because "the library doesn't
+`gcp-critical`, and downgrading it because "the library doesn't
 know what it's used for" is not defensible.
 
 **#11 — QMS holding SOPs and training records.** GAMP category
 depends on what's in the repo: an off-the-shelf QMS configuration is
 4; a hand-built Django app implementing the same workflows is 5. The
-*system_category* is `trial-governance` either way — training records
+*regulatory_tier* is `gcp-supporting` either way — training records
 are governance evidence, not trial data — but the validation rigour
 under `mhra-csv-di` scales with the GAMP category.
 
@@ -247,10 +247,10 @@ under `mhra-csv-di` scales with the GAMP category.
 line is whether the system *collects* personal data. A study
 description page with no forms is `none`. The moment it accepts
 "contact me" submissions, an email address lands in a database and
-the repo crosses into `personal-data`.
+the repo crosses into `data-protection`.
 
 **#18 — Sample chain-of-custody reconciliation.** The instinct is to
-call this `trial-governance` because it feels logistical — boxes,
+call this `gcp-supporting` because it feels logistical — boxes,
 freezers, couriers — and not "clinical data". That instinct is
 wrong. A missing sample is a missing data point: a missed PK
 timepoint, a lost biomarker reading, an SAE workup that never
@@ -258,7 +258,7 @@ reached the lab. The reconciliation output drives queries to sites,
 protocol-deviation reports, and ultimately whether a participant's
 contribution to the endpoint is complete. That puts the tool
 squarely inside A1's "validate trial data" test and makes it
-`critical-trial`. Two consequences worth noting:
+`gcp-critical`. Two consequences worth noting:
 
 - **`pid_boundary` is rarely `none`.** Even if sample IDs are
   pseudonymised, courier manifests, freezer locations, or shipping
@@ -281,22 +281,22 @@ squarely inside A1's "validate trial data" test and makes it
 
 **#19 — Site-status dashboard with CT.gov ingest.** Three sub-calls
 each pull in a different direction; the net answer is
-`trial-governance`, and the reasoning matters.
+`gcp-supporting`, and the reasoning matters.
 
-- **Not `critical-trial`, despite the "two sources" shape.** It looks
+- **Not `gcp-critical`, despite the "two sources" shape.** It looks
   superficially like #18 — sponsor view vs PI view, flag the gaps —
   but the data being reconciled is *site activation metadata*, not
   participant clinical data. A wrong "open" flag can cause a
   protocol deviation (an enrolment recorded against a not-yet-open
   site), which is a CTMS-class concern, not a data-integrity-of-the-
-  endpoint concern. Same family as #10. Promote to `critical-trial`
+  endpoint concern. Same family as #10. Promote to `gcp-critical`
   only if the dashboard's output is wired into an automated
   enrolment gate; manual gating by a trial manager keeps it
   governance.
-- **Not `personal-data`, despite authenticating named PIs.** PI
+- **Not `data-protection`, despite authenticating named PIs.** PI
   identities, NHS affiliations, and emails are personal data and
   trigger `uk-statutory` (UK-GDPR), but the trial nexus dominates.
-  `personal-data` is reserved for systems with *no* trial nexus
+  `data-protection` is reserved for systems with *no* trial nexus
   (Section A3); a system that exists to manage trial sites is
   governance even if it stores PI accounts to do so.
 - **ClinicalTrials.gov is an inbound trusted source, not an
@@ -323,7 +323,7 @@ many regulated systems but is not itself the system under
 validation; its controls belong under `infra-security` at the
 organisation level. The same logic applies to CI templates and
 docs-only repos. If you find yourself wanting to apply
-`critical-trial` controls to one of these, the right move is usually
+`gcp-critical` controls to one of these, the right move is usually
 to tighten the *consuming* regulated repo's own gates, not to
 relabel the infrastructure.
 
@@ -339,7 +339,7 @@ only at the calendar review:
 - A system that was off-the-shelf gains custom code (Cat 4 → 5).
 - Pseudonymised system starts holding direct PID (`pid_boundary`
   flips `separated` → `commingled`).
-- A `personal-data` system starts ingesting trial data, or vice versa.
+- A `data-protection` system starts ingesting trial data, or vice versa.
 - Funder contract changes the security obligations (`infra-security`
   becomes mandatory).
 

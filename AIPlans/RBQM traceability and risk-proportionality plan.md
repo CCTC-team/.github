@@ -27,11 +27,11 @@ five gaps. Scope was fixed by the author's decisions:
   `.compliance.yml` citing the SOPs/forms (SOP040, GD073, FRM129, …)
   that govern the system's validation and risk management.
 - **(C) RBQM re-assessment triggers.** Extend the
-  system-category questionnaire's trigger list with the trial-level
+  regulatory-tier questionnaire's trigger list with the trial-level
   RBQM triggers (substantial modification, safety review, serious
   breach/non-compliance, audit/inspection findings).
 - **(D) Risk-proportionality rationale.** A new inspector-facing doc
-  framing the uniform `critical-trial` controls as the proportionate
+  framing the uniform `gcp-critical` controls as the proportionate
   *validation floor*, with finer proportionality delegated to
   FRM129/SOP040 — pre-empting the "one-size-fits-all" objection the
   deck calls out as unacceptable.
@@ -41,10 +41,10 @@ five gaps. Scope was fixed by the author's decisions:
   necessarily PQ; *No* carries no Test-Type constraint.
 
 **Prerequisite/ordering note:** A and B are a breaking validation
-change (new required fields for `critical-trial`), so they ride a
+change (new required fields for `gcp-critical`), so they ride a
 `schema_version` bump to **3** and follow the existing schema-migration
 ritual in `README.md` ("Schema evolution"). They do not become
-required for `critical-trial` repos still on `schema_version: 2`.
+required for `gcp-critical` repos still on `schema_version: 2`.
 
 ---
 
@@ -56,7 +56,7 @@ required for `critical-trial` repos still on `schema_version: 2`.
   follow), *Project board enforcement → What it enforces*, and
   *Branch protection strategy*.
 - **`compliance.schema.json`** — the schema to extend. Note the
-  existing `allOf` conditional pattern keyed on `system_category`
+  existing `allOf` conditional pattern keyed on `regulatory_tier`
   (lines 130-149); A/B add a conditional also keyed on
   `schema_version` so v2 files don't break.
 - **`docs/alcoa-sdlc-rationale.md`** — the model for the gap-D doc:
@@ -96,11 +96,11 @@ required for `critical-trial` repos still on `schema_version: 2`.
    attribution.
 
 2. **New required fields are gated on `schema_version ≥ 3`, not just
-   `system_category` (gaps A, B).** If the conditional keyed only on
-   `system_category == critical-trial`, every existing v2 file would
+   `regulatory_tier` (gaps A, B).** If the conditional keyed only on
+   `regulatory_tier == gcp-critical`, every existing v2 file would
    fail validation the moment the drift workflow pushes the new schema.
    Adding `schema_version: { minimum: 3 }` to the `if` clause means v2
-   `critical-trial` files stay valid until deliberately migrated —
+   `gcp-critical` files stay valid until deliberately migrated —
    exactly the "migrate at the team's pace" behaviour the README's
    migration ritual promises.
 
@@ -132,9 +132,9 @@ required for `critical-trial` repos still on `schema_version: 2`.
 
 6. **Gap D is documentation, not a new control.** The proportionality
    the deck demands is already expressed by the two-ruleset split
-   (`critical-trial` vs `regulated-non-critical`) and the tiered CtQ.
+   (`gcp-critical` vs `regulated-non-critical`) and the tiered CtQ.
    What's missing is the *written rationale* that the uniform
-   `critical-trial` floor is a deliberate proportionate minimum, with
+   `gcp-critical` floor is a deliberate proportionate minimum, with
    per-feature proportionality delegated to FRM129/SOP040. A rationale
    doc (mirroring `alcoa-sdlc-rationale.md`) closes this without adding
    machinery.
@@ -151,12 +151,12 @@ required for `critical-trial` repos still on `schema_version: 2`.
 
 - [ ] **1a. MODIFY:** `compliance.schema.json`
   - Update the `schema_version` property `description` to add:
-    `v3 = adds ctq_factors + governing_documents, required for critical-trial`.
+    `v3 = adds ctq_factors + governing_documents, required for gcp-critical`.
   - Add two top-level properties:
 
     ```json
     "ctq_factors": {
-      "description": "Critical-to-Quality factors (CCTU/FRM129) this system supports or safeguards. ICH E6(R3) Principle 6 treats fit-for-purpose validation of computerised systems handling clinical data/endpoints as a CtQ factor; this anchors the system to its FRM129 entry so an inspector can trace CtQ factor -> risk -> requirement -> V&V. Required for critical-trial from schema_version 3.",
+      "description": "Critical-to-Quality factors (CCTU/FRM129) this system supports or safeguards. ICH E6(R3) Principle 6 treats fit-for-purpose validation of computerised systems handling clinical data/endpoints as a CtQ factor; this anchors the system to its FRM129 entry so an inspector can trace CtQ factor -> risk -> requirement -> V&V. Required for gcp-critical from schema_version 3.",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
@@ -172,7 +172,7 @@ required for `critical-trial` repos still on `schema_version: 2`.
       }
     },
     "governing_documents": {
-      "description": "QMS documents (SOPs, guidance, forms, templates) governing this system's validation and risk management — the pointer layer between repo controls and the CTU QMS. The granular regulation register stays in the QMS. Required for critical-trial from schema_version 3.",
+      "description": "QMS documents (SOPs, guidance, forms, templates) governing this system's validation and risk management — the pointer layer between repo controls and the CTU QMS. The granular regulation register stays in the QMS. Required for gcp-critical from schema_version 3.",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
@@ -195,10 +195,10 @@ required for `critical-trial` repos still on `schema_version: 2`.
     {
       "if": {
         "properties": {
-          "system_category": { "const": "critical-trial" },
+          "regulatory_tier": { "const": "gcp-critical" },
           "schema_version": { "minimum": 3 }
         },
-        "required": ["schema_version", "system_category"]
+        "required": ["schema_version", "regulatory_tier"]
       },
       "then": {
         "required": ["ctq_factors", "governing_documents"]
@@ -207,7 +207,7 @@ required for `critical-trial` repos still on `schema_version: 2`.
     ```
 
   - Note: do **not** raise the top-level `required` array — these
-    fields are conditionally required only for v3 `critical-trial`.
+    fields are conditionally required only for v3 `gcp-critical`.
 
 - [ ] **1b. MODIFY:** `.github/workflows/compliance-check.yml`
   - Change the `supported_schema_versions` default from `"1,2"` to
@@ -328,12 +328,12 @@ shared helper so the three checks can build on it.
 
 ## Phase 3: RBQM re-assessment triggers (gap C)
 
-- [ ] **3a. MODIFY:** `docs/system-category-questionnaire.md`
+- [ ] **3a. MODIFY:** `docs/regulatory-tier-questionnaire.md`
   - Under *Re-assessment triggers* (≈ line 332), add the trial-level
     RBQM triggers from the deck (slides 11–12, 139), distinct from the
     existing software-classification triggers:
     - A **substantial modification** to the trial protocol that
-      changes the system's CtQ/risk posture (even if `system_category`
+      changes the system's CtQ/risk posture (even if `regulatory_tier`
       is unchanged).
     - A **safety review** outcome (IDMC/TSC) or new safety signal
       affecting data this system handles.
@@ -347,7 +347,7 @@ shared helper so the three checks can build on it.
     `ctq_factors` / `governing_documents` (Phase 1) even when the
     category is unchanged.
 
-- [ ] **3b. MODIFY:** `templates/compliance/system-category-assessment.md`
+- [ ] **3b. MODIFY:** `templates/compliance/regulatory-tier-assessment.md`
   - Add `ctq_factors` and `governing_documents` rows to *Section D —
     Inspector-readiness fields* (or a short new sub-section), so the
     proforma captures the FRM129 link and QMS citations with rationale.
@@ -364,7 +364,7 @@ shared helper so the three checks can build on it.
     objection → answer → regulatory hooks. Cover:
     - The deck's Principle 7 mandate and its "one-size-fits-all is not
       acceptable" statement.
-    - Why the uniform `cctc-critical-trial` ruleset + gxp gate is a
+    - Why the uniform `cctc-gcp-critical` ruleset + gxp gate is a
       deliberate **proportionate floor** (the irreducible minimum for
       any system that can corrupt trial data), not an undifferentiated
       blanket.
@@ -389,7 +389,7 @@ shared helper so the three checks can build on it.
 - [ ] **MODIFY:** `README.md`
   - *Compliance metadata* section: document the new `ctq_factors` and
     `governing_documents` fields and that they are required for
-    `critical-trial` from `schema_version: 3`.
+    `gcp-critical` from `schema_version: 3`.
   - *Schema evolution* section: record the v2→v3 migration as a worked
     example of the existing ritual (validator first, then drift push,
     then per-repo migration PRs).
@@ -402,9 +402,9 @@ shared helper so the three checks can build on it.
 - [ ] **MODIFY:** `templates/compliance/.compliance.yml.example` —
   covered structurally by 1c; ensure the inline comments read as
   guidance, not just placeholders.
-- [ ] **MODIFY:** `templates/compliance/system-category-assessment.md` —
+- [ ] **MODIFY:** `templates/compliance/regulatory-tier-assessment.md` —
   covered by 3b.
-- [ ] **MODIFY:** `docs/system-category-questionnaire.md` — covered by
+- [ ] **MODIFY:** `docs/regulatory-tier-questionnaire.md` — covered by
   3a.
 - [ ] **CHECK:** `templates/compliance/CONTRIBUTING-regulated.md` — if
   it describes the CtQ field or the day-to-day meaning of
@@ -419,7 +419,7 @@ shared helper so the three checks can build on it.
   `pipx run check-jsonschema --schemafile compliance.schema.json templates/compliance/.compliance.yml.example`
   (or the venv install the workflow uses). The v3 example with both
   new blocks must pass; deleting `ctq_factors` from it must fail.
-- [ ] **Back-compat: a v2 critical-trial file still validates** against
+- [ ] **Back-compat: a v2 gcp-critical file still validates** against
   the new schema *without* `ctq_factors`/`governing_documents`
   (confirms Design Decision 2). Construct a throwaway v2 fixture to
   check.

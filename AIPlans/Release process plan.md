@@ -56,7 +56,7 @@ Nothing here is built yet; this is the plan only.
   `scripts/project_enforcement/checks/preconditions/released.py` and
   `scripts/project_enforcement/evidence.py:308` (`release_for_sha`).
 - `templates/compliance/gxp-traceability-caller.yml` + `README-banner.md` +
-  `.compliance.yml.example` — the thin-caller + drift-delivery + system_category-gating
+  `.compliance.yml.example` — the thin-caller + drift-delivery + regulatory_tier-gating
   pattern every regulated repo opts into.
 - `~/repos/claude-org/rules/essentials/regulated-gcp-checklist.md` — ALCOA+ and ICH
   E6(R3) §4.2/§4.3 obligations the release artifacts must satisfy (Attributable,
@@ -130,7 +130,7 @@ Nothing here is built yet; this is the plan only.
    makes — falsely satisfies the strongest gate on the board.
 
 9. **Delivery is reusable-workflow + thin-caller + compliance-drift, gated by
-   `system_category`.** Identical to `gxp-traceability` and `project-card-promote`, so
+   `regulatory_tier`.** Identical to `gxp-traceability` and `project-card-promote`, so
    adoption across regulated repos is uniform and opt-in, and non-regulated repos are
    untouched. Rollout follows the same per-check evaluate→active log in the README.
 
@@ -148,7 +148,7 @@ Nothing here is built yet; this is the plan only.
     canonical set (Phase 0) is `clean, restore, build, test, docs, version, publish, pack,
     push, deploy:staging, verify:staging, functional-tests, tag, deploy:production,
     verify:production` for **all** software repos, plus `validation-docs` and `sbom` as
-    **additionally mandatory for regulated** (`system_category != none`) repos. Each target
+    **additionally mandatory for regulated** (`regulatory_tier != none`) repos. Each target
     has a defined responsibility and declared outputs. *Why:* the user's point exactly — the
     example must not be hardcoded. A contract lets MSBuild/Cake/npm/Make repos all comply,
     lets the release workflow be written once, and gives inspectors a uniform "every
@@ -213,7 +213,7 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     `outputs` (array of globs); a top-level `version_pin_env` (the env var the build honours
     to pin the version, e.g. CCTC_Components' `CCTC_PIN_VERSION`); informational `build_tool`.
     Mandatory-target presence is enforced by 0d, not the schema (it depends on
-    `system_category`).
+    `regulatory_tier`).
 
 - [ ] **0c. NEW:** `templates/compliance/release-targets.yml.example`
   - A worked manifest **for CCTC_Components as the example**, every value commented as
@@ -221,7 +221,7 @@ to bind to. This phase produces the *specification* (in `claude-org`), the *bind
     stubs this into regulated repos as `.github/release-targets.yml` (wired in Phase 6).
 
 - [ ] **0d. NEW:** `scripts/release/contract.py` (+ tests `tests/test_contract.py`, TDD)
-  - Pure function: given a parsed manifest + the repo's `system_category`, return the list of
+  - Pure function: given a parsed manifest + the repo's `regulatory_tier`, return the list of
     missing mandatory targets and any declared target not in the canonical set. Used by the
     release workflow (fail fast) and by `compliance-check` (Phase 6) so a regulated repo that
     omits `validation-docs`/`sbom`, or never declares `tag`, is flagged. Tests cover: all
@@ -313,10 +313,10 @@ Pure-Python unit, highest design value — write tests first (paired sub-items).
   - **Permissions:** `contents: write`, `id-token: write`, `attestations: write`,
     `packages: read`, `issues: read`, `pull-requests: read`.
   - **Gate + contract-check first** (mirror `gxp-traceability.yml` steps 1–2): if no
-    `.compliance.yml` or `system_category == none`, exit success. Otherwise load
+    `.compliance.yml` or `regulatory_tier == none`, exit success. Otherwise load
     `.github/release-targets.yml` (path from `release_targets_path`) and run
     `scripts/release/contract.py` — **fail fast** if a mandatory target for this
-    `system_category` is missing or undeclared. This is where a repo whose build doesn't meet
+    `regulatory_tier` is missing or undeclared. This is where a repo whose build doesn't meet
     the contract is caught.
   - **Steps (in order) — every build action is `manifest.targets.<name>.run`, never a
     hardcoded command; every artifact is collected from `manifest.targets.<name>.outputs`:**
@@ -452,7 +452,7 @@ and process, not verifiable logic).
     other checks. *Why here:* this is what makes "the contract" real — a repo can't quietly
     ship without meeting the defined target set; it's caught on every PR, not only at release.
 
-- [ ] **6c. MODIFY:** `rulesets/cctc-critical-trial.json` (confirm, amend only if needed)
+- [ ] **6c. MODIFY:** `rulesets/cctc-gcp-critical.json` (confirm, amend only if needed)
   - Verify `refs/heads/release/*` (`:11`) inherits the same `pull_request` review +
     `required_signatures` + `non_fast_forward`/`deletion` rules as `main`. If the rules
     array doesn't already apply to the release branch include, document the gap; do not
@@ -522,7 +522,7 @@ and process, not verifiable logic).
 - [ ] Production-environment approval blocks publish/`latest` until a required reviewer
   approves, and the approver + UTC timestamp land in the Release's authorisation block.
 - [ ] `compliance-drift` dry run shows `.github/release.yml` + the release caller being
-  stubbed into a regulated repo and nothing into a `system_category: none` repo.
+  stubbed into a regulated repo and nothing into a `regulatory_tier: none` repo.
 - [ ] Tag ruleset confirmed: a published `v*` tag cannot be deleted or moved.
 - [ ] Signed-tag check: the release workflow verifies the `v*` tag is GPG/SSH-signed and
   refuses to publish an unsigned tag.
