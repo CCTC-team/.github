@@ -41,8 +41,8 @@ def _full_fields(**overrides):
         "Requirement ID": "REQ-024",
         "Test Type": "PQ",
         "Critical-to-Quality": "Yes",
-        "PQ Approver": "bob",
-        "PQ Signoff Date": _today().isoformat(),
+        "Acceptance Approver": "bob",
+        "Acceptance Signoff Date": _today().isoformat(),
         "QA Approver": "carol",
         "QA Signoff Date": _today().isoformat(),
     }
@@ -100,11 +100,11 @@ def test_days_since_handles_iso():
     assert days_since("not-a-date") is None
 
 
-def test_unticked_pq_checklist_at_pq_review_is_reported():
-    snap = _snapshot([_item(status="PQ review")])
+def test_unticked_acceptance_checklist_at_user_acceptance_is_reported():
+    snap = _snapshot([_item(status="User acceptance")])
     body = (
-        "### PQ review checklist:\n\n"
-        "- [x] Feature meets the user requirement in the operational environment\n"
+        "### User acceptance checklist:\n\n"
+        "- [x] Feature meets the user requirement against the URS in a development/test environment\n"
         "- [ ] Workflow is usable in practice (not just technically passing)\n"
     )
     findings = audit_project(
@@ -113,7 +113,7 @@ def test_unticked_pq_checklist_at_pq_review_is_reported():
         issue_bodies={("CCTC-team/foo", 1): body},
     )
     assert any(
-        f.category == "checklist_unticked" and "PQ checklist" in f.summary
+        f.category == "checklist_unticked" and "user-acceptance checklist" in f.summary
         for f in findings
     )
 
@@ -139,8 +139,8 @@ def test_unticked_qa_checklist_at_qa_approved_is_reported():
 def test_fully_ticked_checklists_at_qa_approved_is_silent():
     snap = _snapshot([_item(status="QA approved", fields=_full_fields())])
     body = (
-        "### PQ review checklist:\n\n"
-        "- [x] Feature meets the user requirement in the operational environment\n"
+        "### User acceptance checklist:\n\n"
+        "- [x] Feature meets the user requirement against the URS in a development/test environment\n"
         "- [x] Workflow is usable in practice (not just technically passing)\n\n"
         "### QA review checklist:\n\n"
         "- [x] Risk linkage verified against the canonical risk register\n"
@@ -156,7 +156,7 @@ def test_fully_ticked_checklists_at_qa_approved_is_silent():
 
 def test_checklist_check_silent_when_body_absent():
     # No issue body fetched — audit should not invent failures.
-    snap = _snapshot([_item(status="PQ review")])
+    snap = _snapshot([_item(status="User acceptance")])
     findings = audit_project(snap, issue_authors={}, issue_bodies={})
     assert [f for f in findings if f.category == "checklist_unticked"] == []
 
@@ -167,8 +167,8 @@ def test_required_fields_constant_matches_design():
         "Requirement ID",
         "Test Type",
         "Critical-to-Quality",
-        "PQ Approver",
-        "PQ Signoff Date",
+        "Acceptance Approver",
+        "Acceptance Signoff Date",
         "QA Approver",
         "QA Signoff Date",
     )

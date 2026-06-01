@@ -22,7 +22,7 @@ CANONICAL_LIFECYCLE: tuple[str, ...] = (
     "In development",
     "Code review",
     "V&V tests pass",
-    "PQ review",
+    "User acceptance",
     "QA approved",
     "Released",
     "Redundant",
@@ -35,14 +35,14 @@ REQUIRED_FIELDS_AT_QA: tuple[str, ...] = (
     "Requirement ID",
     "Test Type",
     "Critical-to-Quality",
-    "PQ Approver",
-    "PQ Signoff Date",
+    "Acceptance Approver",
+    "Acceptance Signoff Date",
     "QA Approver",
     "QA Signoff Date",
 )
 
 
-_PQ_CHECKLIST_HEADER = "PQ review checklist:"
+_ACCEPTANCE_CHECKLIST_HEADER = "User acceptance checklist:"
 _QA_CHECKLIST_HEADER = "QA review checklist:"
 
 _IN_DEVELOPMENT_STALE_DAYS = 14
@@ -66,7 +66,7 @@ def days_since(iso_value: Optional[str]) -> Optional[int]:
     return (datetime.date.today() - d).days
 
 
-_PQ_OR_LATER = ("PQ review", "QA approved", "Released")
+_ACCEPTANCE_OR_LATER = ("User acceptance", "QA approved", "Released")
 _QA_OR_LATER = ("QA approved", "Released")
 
 # Window for "Recent bypasses honoured" in the rolling drift issue. The
@@ -110,17 +110,17 @@ def audit_project(
                     ))
 
             author = issue_authors.get(key)
-            pq = (fields.get("PQ Approver") or "").lstrip("@").strip()
+            acceptance = (fields.get("Acceptance Approver") or "").lstrip("@").strip()
             qa = (fields.get("QA Approver") or "").lstrip("@").strip()
-            identities = {x for x in (author, pq, qa) if x}
-            if author and pq and qa and len(identities) < 3:
+            identities = {x for x in (author, acceptance, qa) if x}
+            if author and acceptance and qa and len(identities) < 3:
                 findings.append(Finding(
                     severity="hard",
                     category="identity_conflict",
                     item_label=label,
                     summary=(
                         f"{label} at `{status}` does not have three distinct identities across "
-                        f"issue author (`{author}`), PQ Approver (`{pq}`), QA Approver (`{qa}`)."
+                        f"issue author (`{author}`), Acceptance Approver (`{acceptance}`), QA Approver (`{qa}`)."
                     ),
                 ))
 
@@ -134,12 +134,12 @@ def audit_project(
                     summary=f"{label} is at `Released` with no linked merged PR.",
                 ))
 
-        # _QA_OR_LATER ⊂ _PQ_OR_LATER: the outer guard covers both
+        # _QA_OR_LATER ⊂ _ACCEPTANCE_OR_LATER: the outer guard covers both
         # checklist checks; the QA branch then narrows to the QA window.
-        if status in _PQ_OR_LATER:
+        if status in _ACCEPTANCE_OR_LATER:
             body = issue_bodies.get(key)
             if body is not None:
-                parsed = parse_checklist(body, _PQ_CHECKLIST_HEADER)
+                parsed = parse_checklist(body, _ACCEPTANCE_CHECKLIST_HEADER)
                 unticked = [lbl for lbl, ticked in parsed if not ticked]
                 if parsed and unticked:
                     findings.append(Finding(
@@ -147,7 +147,7 @@ def audit_project(
                         category="checklist_unticked",
                         item_label=label,
                         summary=(
-                            f"{label} at `{status}` has unticked PQ checklist item(s): "
+                            f"{label} at `{status}` has unticked user-acceptance checklist item(s): "
                             f"{', '.join(f'`{u}`' for u in unticked)}."
                         ),
                     ))

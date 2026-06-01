@@ -129,7 +129,7 @@ def test_check_suite_does_not_promote_past_vv():
         project_number="31",
         allowed_project_ids=ALLOWED,
         resolved_project_id="PVT_test",
-        current_status="PQ review",
+        current_status="User acceptance",
         check_conclusion="success",
     )
     assert d.action == "skip"
