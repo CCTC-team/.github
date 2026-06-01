@@ -6,6 +6,7 @@ Critical-to-Quality chosen on the card.
 
 from __future__ import annotations
 
+from project_enforcement import ctq
 from project_enforcement.body_parser import extract_field
 
 
@@ -17,9 +18,11 @@ def check(item_meta, ctx, evidence) -> list[str]:
     if not requirement:
         reasons.append("`Requirement ID` field on the card is empty.")
 
-    ctq = (fields.get("Critical-to-Quality") or "").strip()
-    if not ctq:
-        reasons.append("`Critical-to-Quality` field on the card is unset.")
+    if ctq.tier(fields) == "unset":
+        reasons.append(
+            "`Critical-to-Quality` field on the card is unset "
+            "(choose Critical, Important or No)."
+        )
 
     repo = item_meta.get("source_repo")
     number = item_meta.get("number")

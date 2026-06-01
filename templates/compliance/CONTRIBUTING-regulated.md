@@ -87,16 +87,20 @@ reverted.
   always allowed. From `Redundant` or `Archived`, the only legal
   restoration target is `Triage` — a card cannot launder its history by
   being archived and dropped back into a later column.
-- **Approver fields must be GitHub usernames.** `PQ Approver` and
+- **Approver fields must be GitHub usernames.** `Acceptance Approver` and
   `QA Approver` are free-text on the card; type the username without
   the `@`. The automation validates the login via the GitHub API and
   refuses the move if it doesn't resolve.
-- **Segregation of duties is required.** The PR author, PQ Approver,
+- **Segregation of duties is required.** The PR author, Acceptance Approver,
   and QA Approver must be three distinct people. The audit flags any
   card that ends in `QA approved` with fewer than three identities.
-- **PQ / QA checkboxes on the issue body are load-bearing.** Tick them
-  before moving the card to `PQ review` / `QA approved` — the
+- **Acceptance / QA checkboxes on the issue body are load-bearing.** Tick them
+  before moving the card to `User acceptance` / `QA approved` — the
   automation reads them from the issue body, not from your memory.
+  `User acceptance` is the feature-level acceptance sign-off (the feature
+  meets the URS in a dev/test environment); it is **not** the formal
+  Performance Qualification, which is performed on the built release
+  candidate at the release-pipeline authorisation gate.
 - **`Risk ID` / `Requirement ID` on the card mirror the issue body.**
   The issue body is canonical; edit the issue, not the card, if they
   diverge. Drift fires a comment within 5 minutes.

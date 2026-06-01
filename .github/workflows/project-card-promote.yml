@@ -6,7 +6,7 @@ name: Project card promote (reusable)
 # check_suite.completed.
 #
 # Only the automatic states (Code review, V&V tests pass) can be the
-# target of automation. PQ review, QA approved, Released are
+# target of automation. User acceptance, QA approved, Released are
 # human-attested and must never be reached by this workflow — see the
 # state-machine constants in scripts/project_enforcement/promote.py.
 #

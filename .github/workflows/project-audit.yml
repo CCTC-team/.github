@@ -199,7 +199,7 @@ jobs:
                   num = meta.get("number")
                   if not repo or not num:
                       continue
-                  needs_issue = status in ("QA approved", "Released", "PQ review")
+                  needs_issue = status in ("QA approved", "Released", "User acceptance")
                   if needs_issue:
                       info = lookup_issue(repo, num)
                       issue_authors[(repo, num)] = info["author"]

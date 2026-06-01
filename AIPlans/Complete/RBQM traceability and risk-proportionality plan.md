@@ -149,7 +149,7 @@ required for `gcp-critical` repos still on `schema_version: 2`.
 
 ## Phase 1: Schema v3 — CtQ-factor and QMS-document anchors (gaps A, B)
 
-- [ ] **1a. MODIFY:** `compliance.schema.json`
+- [x] **1a. MODIFY:** `compliance.schema.json`
   - Update the `schema_version` property `description` to add:
     `v3 = adds ctq_factors + governing_documents, required for gcp-critical`.
   - Add two top-level properties:
@@ -209,13 +209,13 @@ required for `gcp-critical` repos still on `schema_version: 2`.
   - Note: do **not** raise the top-level `required` array — these
     fields are conditionally required only for v3 `gcp-critical`.
 
-- [ ] **1b. MODIFY:** `.github/workflows/compliance-check.yml`
+- [x] **1b. MODIFY:** `.github/workflows/compliance-check.yml`
   - Change the `supported_schema_versions` default from `"1,2"` to
     `"1,2,3"` (line 37). This is step 1 of the README migration ritual
     ("add the new version to the validator's supported set, keeping the
     old one") — it must merge **before** any repo bumps to v3.
 
-- [ ] **1c. MODIFY:** `templates/compliance/.compliance.yml.example`
+- [x] **1c. MODIFY:** `templates/compliance/.compliance.yml.example`
   - Bump `schema_version: 2` → `schema_version: 3`.
   - Add a `ctq_factors` block after `regulatory_pillars`, with a
     TODO-style entry and explanatory comment, e.g.:
@@ -254,7 +254,7 @@ required for `gcp-critical` repos still on `schema_version: 2`.
 TDD throughout — write the failing test, then the code. Start with the
 shared helper so the three checks can build on it.
 
-- [ ] **2a. NEW (test):** `scripts/project_enforcement/tests/test_ctq.py`
+- [x] **2a. NEW (test):** `scripts/project_enforcement/tests/test_ctq.py`
   - Assert a `tier()` helper normalises: `"Yes"`/`"yes"`/`"Critical"` →
     `"critical"`; `"Important"` → `"important"`; `"No"`/`"None"`/`""` →
     `"no"` (treat empty as unset — see note); unknown → lower-cased
@@ -264,27 +264,27 @@ shared helper so the three checks can build on it.
     "unset" apart from a deliberate "No". Recommend an `unset` return
     for empty so 2e can flag it.
 
-- [ ] **2b. NEW:** `scripts/project_enforcement/ctq.py`
+- [x] **2b. NEW:** `scripts/project_enforcement/ctq.py`
   - Implement `tier(value_or_fields) -> str` per 2a. Single source of
     truth for the CtQ vocabulary and the legacy `yes → critical` alias.
   - Expose the PQ-required set: `CRITICAL_TEST_TYPES = {"PQ", "OQ+PQ", "IQ+OQ+PQ"}`
     (moved from `in_development.py`).
 
-- [ ] **2c. MODIFY (test):** `scripts/project_enforcement/tests/test_preconditions.py`
+- [x] **2c. MODIFY (test):** `scripts/project_enforcement/tests/test_preconditions.py`
   - Extend the `in_development` cases: `Critical` + non-PQ Test Type →
     reason; `Important` + any set Test Type (e.g. `OQ`) → no reason;
     `Important` + unset Test Type → reason (the existing "Test Type
     unset" rule); `No` + non-PQ → no reason. Keep a legacy `"Yes"` case
     asserting it still behaves as `Critical`.
 
-- [ ] **2d. MODIFY:** `scripts/project_enforcement/checks/preconditions/in_development.py`
+- [x] **2d. MODIFY:** `scripts/project_enforcement/checks/preconditions/in_development.py`
   - Replace the `_CTQ_TEST_TYPES` literal and `ctq == "yes"` branch
     with `from project_enforcement import ctq`; compute
     `tier = ctq.tier(fields)`; apply the PQ constraint only when
     `tier == "critical"`. Leave the generic "Test Type unset" check as
     the mechanism that catches an `Important` factor with no Test Type.
 
-- [ ] **2e. MODIFY (test + code):**
+- [x] **2e. MODIFY (test + code):**
   `scripts/project_enforcement/checks/preconditions/requirement_defined.py`
   (and its cases in `test_preconditions.py`)
   - Tests first: `Critical-to-Quality` unset → reason (unchanged);
@@ -294,20 +294,20 @@ shared helper so the three checks can build on it.
     `ctq.tier(...)` returning `"unset"`; update the reason text to
     name the three valid tiers.
 
-- [ ] **2f. MODIFY (test):** `scripts/project_enforcement/tests/test_drift_checks.py`
+- [x] **2f. MODIFY (test):** `scripts/project_enforcement/tests/test_drift_checks.py`
   - Extend `type_quality_consistency` cases: `Critical` + `N/A` →
     comment requiring PQ; `Important` + `N/A` → comment requiring a
     (non-PQ-OK) Test Type; `Important` + `OQ` → **no** comment;
     `Critical` + `PQ` → no comment (existing). Keep a legacy `"Yes"`
     case.
 
-- [ ] **2g. MODIFY:** `scripts/project_enforcement/checks/drift/type_quality_consistency.py`
+- [x] **2g. MODIFY:** `scripts/project_enforcement/checks/drift/type_quality_consistency.py`
   - Use `ctq.tier(fields)`. For `critical`: existing N/A→comment text
     (must include PQ). Add an `important` branch: if Test Type ∈
     {N/A, None, ""}, comment that an Important CtQ factor still
     requires a Test Type (PQ not required). No comment for `no`.
 
-- [ ] **2h. MODIFY:** `.github/ISSUE_TEMPLATE/regulated_feature.yml`
+- [x] **2h. MODIFY:** `.github/ISSUE_TEMPLATE/regulated_feature.yml`
   - In the intro markdown (the list of card fields) and any CtQ
     mention, update **Critical-to-Quality** guidance to describe the
     three tiers and what each implies for Test Type. This file is
@@ -315,7 +315,7 @@ shared helper so the three checks can build on it.
     not structure, and do not rename the load-bearing `User spec:` /
     `Feature link:` labels.
 
-- [ ] **2i. Operational (NOT a repo file — record in README rollout
+- [x] **2i. Operational (NOT a repo file — record in README rollout
       note, see Documentation):** the project board's
       `Critical-to-Quality` single-select must gain options
       **Critical / Important / No**. Retain **Yes** as a hidden/legacy
@@ -328,7 +328,7 @@ shared helper so the three checks can build on it.
 
 ## Phase 3: RBQM re-assessment triggers (gap C)
 
-- [ ] **3a. MODIFY:** `docs/regulatory-tier-questionnaire.md`
+- [x] **3a. MODIFY:** `docs/regulatory-tier-questionnaire.md`
   - Under *Re-assessment triggers* (≈ line 332), add the trial-level
     RBQM triggers from the deck (slides 11–12, 139), distinct from the
     existing software-classification triggers:
@@ -347,7 +347,7 @@ shared helper so the three checks can build on it.
     `ctq_factors` / `governing_documents` (Phase 1) even when the
     category is unchanged.
 
-- [ ] **3b. MODIFY:** `templates/compliance/regulatory-tier-assessment.md`
+- [x] **3b. MODIFY:** `templates/compliance/regulatory-tier-assessment.md`
   - Add `ctq_factors` and `governing_documents` rows to *Section D —
     Inspector-readiness fields* (or a short new sub-section), so the
     proforma captures the FRM129 link and QMS citations with rationale.
@@ -359,7 +359,7 @@ shared helper so the three checks can build on it.
 
 ## Phase 4: Risk-proportionality rationale (gap D)
 
-- [ ] **4a. NEW:** `docs/risk-proportionality-rationale.md`
+- [x] **4a. NEW:** `docs/risk-proportionality-rationale.md`
   - Model on `docs/alcoa-sdlc-rationale.md`: inspector-facing,
     objection → answer → regulatory hooks. Cover:
     - The deck's Principle 7 mandate and its "one-size-fits-all is not
@@ -377,7 +377,7 @@ shared helper so the three checks can build on it.
       selection: `ctq_factors` → risk register → Requirement ID →
       Test Type tier → V&V evidence.
 
-- [ ] **4b. MODIFY:** `README.md`
+- [x] **4b. MODIFY:** `README.md`
   - In *Branch protection strategy* (and/or *Category-specific*), add a
     one-line cross-reference to `docs/risk-proportionality-rationale.md`
     exactly as the signing rule references `docs/alcoa-sdlc-rationale.md`.
@@ -386,7 +386,7 @@ shared helper so the three checks can build on it.
 
 ## Documentation
 
-- [ ] **MODIFY:** `README.md`
+- [x] **MODIFY:** `README.md`
   - *Compliance metadata* section: document the new `ctq_factors` and
     `governing_documents` fields and that they are required for
     `gcp-critical` from `schema_version: 3`.
@@ -399,47 +399,48 @@ shared helper so the three checks can build on it.
   - *Branch protection strategy*: the gap-D cross-reference (4b).
   - Add the board-field option change (2i) as a rollout note so the
     operational step is recorded, not lost in chat.
-- [ ] **MODIFY:** `templates/compliance/.compliance.yml.example` —
+- [x] **MODIFY:** `templates/compliance/.compliance.yml.example` —
   covered structurally by 1c; ensure the inline comments read as
   guidance, not just placeholders.
-- [ ] **MODIFY:** `templates/compliance/regulatory-tier-assessment.md` —
+- [x] **MODIFY:** `templates/compliance/regulatory-tier-assessment.md` —
   covered by 3b.
-- [ ] **MODIFY:** `docs/regulatory-tier-questionnaire.md` — covered by
+- [x] **MODIFY:** `docs/regulatory-tier-questionnaire.md` — covered by
   3a.
-- [ ] **CHECK:** `templates/compliance/CONTRIBUTING-regulated.md` — if
+- [x] **CHECK:** `templates/compliance/CONTRIBUTING-regulated.md` — if
   it describes the CtQ field or the day-to-day meaning of
   Critical-to-Quality, update it for the three tiers; otherwise leave.
+  **Checked: no CtQ / Test Type mention, so left unchanged.**
 
 ---
 
 ## Verification
 
-- [ ] **Schema validates the example.** Locally reproduce the CI
+- [x] **Schema validates the example.** Locally reproduce the CI
   validator:
   `pipx run check-jsonschema --schemafile compliance.schema.json templates/compliance/.compliance.yml.example`
   (or the venv install the workflow uses). The v3 example with both
   new blocks must pass; deleting `ctq_factors` from it must fail.
-- [ ] **Back-compat: a v2 gcp-critical file still validates** against
+- [x] **Back-compat: a v2 gcp-critical file still validates** against
   the new schema *without* `ctq_factors`/`governing_documents`
   (confirms Design Decision 2). Construct a throwaway v2 fixture to
   check.
-- [ ] **Enforcement tests pass:**
+- [x] **Enforcement tests pass:**
   `python3 -m pytest scripts/project_enforcement/tests` — all existing
   plus the new/extended CtQ cases (2a, 2c, 2e, 2f) green.
-- [ ] **Legacy alias works:** a card with `Critical-to-Quality: "Yes"`
+- [x] **Legacy alias works:** a card with `Critical-to-Quality: "Yes"`
   and `Test Type: "OQ"` still produces the PQ-required reason
   (`in_development`) and the inconsistency comment
   (`type_quality_consistency`).
-- [ ] **Three-tier behaviour, manual trace:** `Important` + `OQ` →
+- [x] **Three-tier behaviour, manual trace:** `Important` + `OQ` →
   clean; `Important` + `N/A` → comment; `No` + `OQ` → clean;
   `Critical` + `IQ+OQ+PQ` → clean.
-- [ ] **Validator gate honoured:** `compliance-check.yml`
+- [x] **Validator gate honoured:** `compliance-check.yml`
   `supported_schema_versions` includes `3`; a repo bumping to v3
   before this merges would (correctly) fail the "schema_version
   supported" step — confirm the default change landed.
-- [ ] **Docs render and links resolve:** the new
+- [x] **Docs render and links resolve:** the new
   `docs/risk-proportionality-rationale.md` is reachable from the
   README anchor, mirroring the ALCOA doc's linkage.
-- [ ] **No load-bearing labels renamed** in `regulated_feature.yml`
+- [x] **No load-bearing labels renamed** in `regulated_feature.yml`
   (`User spec:`, `Feature link:`, `Risk ID:`, `Requirement ID:`
   intact).

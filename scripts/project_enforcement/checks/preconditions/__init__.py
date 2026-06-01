@@ -8,7 +8,7 @@ runs the function for the new Status value on every Status change.
 from project_enforcement.checks.preconditions import (
     code_review,
     in_development,
-    pq_review,
+    user_acceptance,
     qa_approved,
     released,
     requirement_defined,
@@ -23,7 +23,7 @@ PRECONDITIONS = {
     "In development": in_development.check,
     "Code review": code_review.check,
     "V&V tests pass": vv_tests_pass.check,
-    "PQ review": pq_review.check,
+    "User acceptance": user_acceptance.check,
     "QA approved": qa_approved.check,
     "Released": released.check,
 }

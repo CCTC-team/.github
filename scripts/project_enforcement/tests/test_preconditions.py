@@ -14,7 +14,7 @@ from project_enforcement.checks.preconditions import (
     PRECONDITIONS,
     code_review,
     in_development,
-    pq_review,
+    user_acceptance,
     qa_approved,
     released,
     requirement_defined,
@@ -114,6 +114,12 @@ class TestRequirementDefined:
         reasons = requirement_defined.check(item, _ctx(), ev)
         assert any("Critical-to-Quality" in r for r in reasons)
 
+    @pytest.mark.parametrize("value", ["Critical", "Important", "No"])
+    def test_passes_with_any_recognised_tier(self, value):
+        item = _item({"Requirement ID": "REQ-024", "Critical-to-Quality": value})
+        ev = self._evidence("### Requirement ID:\n\nREQ-024\n")
+        assert requirement_defined.check(item, _ctx(), ev) == []
+
     def test_fails_when_mismatch(self):
         item = _item({"Requirement ID": "REQ-024", "Critical-to-Quality": "Yes"})
         ev = self._evidence("### Requirement ID:\n\nREQ-999\n")
@@ -158,12 +164,48 @@ class TestInDevelopment:
         assert any("Test Type" in r for r in reasons)
 
     def test_fails_when_ctq_yes_and_test_type_excludes_pq(self):
+        # Legacy alias: a card still carrying "Yes" behaves as Critical.
         item = _item({
             "Assignees": "alice", "Iteration": "Sprint 1",
             "Test Type": "OQ", "Critical-to-Quality": "Yes",
         })
         reasons = in_development.check(item, _ctx(), self._evidence())
         assert any("include PQ" in r for r in reasons)
+
+    def test_fails_when_critical_and_test_type_excludes_pq(self):
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Test Type": "OQ", "Critical-to-Quality": "Critical",
+        })
+        reasons = in_development.check(item, _ctx(), self._evidence())
+        assert any("include PQ" in r for r in reasons)
+
+    def test_passes_when_important_with_non_pq_test_type(self):
+        # Important warrants a Test Type but not the PQ rigour reserved
+        # for Critical, so a non-PQ type is acceptable here.
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Test Type": "OQ", "Critical-to-Quality": "Important",
+        })
+        assert in_development.check(item, _ctx(), self._evidence()) == []
+
+    def test_fails_when_important_and_test_type_unset(self):
+        # Important still needs *some* Test Type — caught by the generic
+        # "Test Type unset" rule, not a PQ-specific one.
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Critical-to-Quality": "Important",
+        })
+        reasons = in_development.check(item, _ctx(), self._evidence())
+        assert any("Test Type" in r for r in reasons)
+        assert not any("include PQ" in r for r in reasons)
+
+    def test_passes_when_no_tier_with_non_pq_test_type(self):
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Test Type": "OQ", "Critical-to-Quality": "No",
+        })
+        assert in_development.check(item, _ctx(), self._evidence()) == []
 
 
 # ============================== Code review ==============================
@@ -236,12 +278,12 @@ class TestVvTestsPass:
         assert any("Feature link" in r for r in reasons)
 
 
-# ============================== PQ review ==============================
+# ============================== User acceptance ==============================
 
-class TestPqReview:
+class TestUserAcceptance:
     def _evidence(self, *, body_checks=(True, True), author="alice", pr_authors=("bob",)):
-        body = "### PQ review checklist:\n\n"
-        labels = pq_review.PQ_CHECKLIST_LABELS
+        body = "### User acceptance checklist:\n\n"
+        labels = user_acceptance.ACCEPTANCE_CHECKLIST_LABELS
         for ticked, label in zip(body_checks, labels):
             body += f"- [{'x' if ticked else ' '}] {label}\n"
         ev = StubEvidence()
@@ -252,39 +294,39 @@ class TestPqReview:
         return ev
 
     def test_passes(self):
-        item = _item({"PQ Approver": "carol"})
+        item = _item({"Acceptance Approver": "carol"})
         ev = self._evidence(author="alice", pr_authors=("bob",))
-        assert pq_review.check(item, _ctx(), ev) == []
+        assert user_acceptance.check(item, _ctx(), ev) == []
 
     def test_fails_when_checklist_unticked(self):
-        item = _item({"PQ Approver": "carol"})
+        item = _item({"Acceptance Approver": "carol"})
         ev = self._evidence(body_checks=(True, False))
-        reasons = pq_review.check(item, _ctx(), ev)
+        reasons = user_acceptance.check(item, _ctx(), ev)
         assert any("not ticked" in r for r in reasons)
 
     def test_fails_when_approver_missing(self):
-        item = _item({"PQ Approver": ""})
+        item = _item({"Acceptance Approver": ""})
         ev = self._evidence()
-        reasons = pq_review.check(item, _ctx(), ev)
-        assert any("PQ Approver" in r and "unset" in r for r in reasons)
+        reasons = user_acceptance.check(item, _ctx(), ev)
+        assert any("Acceptance Approver" in r and "unset" in r for r in reasons)
 
     def test_fails_when_approver_is_issue_author(self):
-        item = _item({"PQ Approver": "alice"})
+        item = _item({"Acceptance Approver": "alice"})
         ev = self._evidence(author="alice")
-        reasons = pq_review.check(item, _ctx(), ev)
+        reasons = user_acceptance.check(item, _ctx(), ev)
         assert any("issue author" in r for r in reasons)
 
     def test_fails_when_approver_authored_commits(self):
-        item = _item({"PQ Approver": "bob"})
+        item = _item({"Acceptance Approver": "bob"})
         ev = self._evidence(pr_authors=("bob",))
-        reasons = pq_review.check(item, _ctx(), ev)
+        reasons = user_acceptance.check(item, _ctx(), ev)
         assert any("commits" in r for r in reasons)
 
     def test_fails_when_approver_not_a_user(self):
-        item = _item({"PQ Approver": "ghost"})
+        item = _item({"Acceptance Approver": "ghost"})
         ev = self._evidence()
         actions = RecordingActions(known_users={"alice", "bob", "carol"})
-        reasons = pq_review.check(item, _ctx(actions), ev)
+        reasons = user_acceptance.check(item, _ctx(actions), ev)
         assert any("not a known GitHub user" in r for r in reasons)
 
 
@@ -306,9 +348,9 @@ class TestQaApproved:
         today = datetime.date.today().isoformat()
         defaults = {
             "QA Approver": "dave",
-            "PQ Approver": "carol",
+            "Acceptance Approver": "carol",
             "QA Signoff Date": today,
-            "PQ Signoff Date": today,
+            "Acceptance Signoff Date": today,
         }
         defaults.update(kwargs)
         return defaults
@@ -333,20 +375,20 @@ class TestQaApproved:
         reasons = qa_approved.check(item, _ctx(), self._evidence())
         assert any("future" in r for r in reasons)
 
-    def test_fails_when_qa_before_pq(self):
+    def test_fails_when_qa_before_acceptance(self):
         today = datetime.date.today()
         item = _item(self._fields(**{
             "QA Signoff Date": today.isoformat(),
-            "PQ Signoff Date": (today + datetime.timedelta(days=1)).isoformat(),
+            "Acceptance Signoff Date": (today + datetime.timedelta(days=1)).isoformat(),
         }))
-        # PQ in the future is its own problem, but we also expect the QA<PQ message.
+        # Acceptance in the future is its own problem, but we also expect the QA<Acceptance message.
         reasons = qa_approved.check(item, _ctx(), self._evidence())
         assert any("earlier than" in r for r in reasons)
 
-    def test_fails_when_qa_equals_pq_approver(self):
-        item = _item(self._fields(**{"QA Approver": "carol", "PQ Approver": "carol"}))
+    def test_fails_when_qa_equals_acceptance_approver(self):
+        item = _item(self._fields(**{"QA Approver": "carol", "Acceptance Approver": "carol"}))
         reasons = qa_approved.check(item, _ctx(), self._evidence())
-        assert any("same as `PQ Approver`" in r for r in reasons)
+        assert any("same as `Acceptance Approver`" in r for r in reasons)
 
     def test_fails_when_qa_is_issue_author(self):
         item = _item(self._fields(**{"QA Approver": "alice"}))
@@ -391,5 +433,5 @@ class TestReleased:
 def test_preconditions_registry_complete():
     assert set(PRECONDITIONS) == {
         "Risk linked", "Requirement defined", "In development", "Code review",
-        "V&V tests pass", "PQ review", "QA approved", "Released",
+        "V&V tests pass", "User acceptance", "QA approved", "Released",
     }

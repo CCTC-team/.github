@@ -1,7 +1,7 @@
-"""When a PQ/QA Signoff Date changes, validate it.
+"""When an Acceptance/QA Signoff Date changes, validate it.
 
-Rules: not in the future, not before the issue was opened, and the PQ
-date is not after the QA date (when both are present).
+Rules: not in the future, not before the issue was opened, and the
+Acceptance date is not after the QA date (when both are present).
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 
 
-_DATE_FIELDS = {"PQ Signoff Date", "QA Signoff Date"}
+_DATE_FIELDS = {"Acceptance Signoff Date", "QA Signoff Date"}
 
 
 def _parse(value):
@@ -50,18 +50,18 @@ def check(change, ctx, evidence=None) -> None:
                 f"(`{issue.opened_at}`)."
             )
 
-    other_field = "QA Signoff Date" if change.field_name == "PQ Signoff Date" else "PQ Signoff Date"
+    other_field = "QA Signoff Date" if change.field_name == "Acceptance Signoff Date" else "Acceptance Signoff Date"
     other_value = (item.get("fields") or {}).get(other_field)
     other_date = _parse(other_value)
     if other_date is not None:
-        pq_date, qa_date = (
+        acceptance_date, qa_date = (
             (new_date, other_date)
-            if change.field_name == "PQ Signoff Date"
+            if change.field_name == "Acceptance Signoff Date"
             else (other_date, new_date)
         )
-        if pq_date > qa_date:
+        if acceptance_date > qa_date:
             reasons.append(
-                f"PQ ≤ QA expected, but `PQ Signoff Date` (`{pq_date.isoformat()}`) is "
+                f"Acceptance ≤ QA expected, but `Acceptance Signoff Date` (`{acceptance_date.isoformat()}`) is "
                 f"after the QA date (`{qa_date.isoformat()}`)."
             )
 

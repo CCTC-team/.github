@@ -1,8 +1,13 @@
 """QA approved precondition.
 
 QA checklist ticked, QA Approver + QA Signoff Date set, date in valid
-range, three distinct identities (author / PQ Approver / QA Approver),
-and Deviation Ref if any prior gxp-traceability run failed.
+range, three distinct identities (author / Acceptance Approver / QA
+Approver), and Deviation Ref if any prior gxp-traceability run failed.
+
+This is the feature-level QA of the development evidence (URS → V&V →
+user-acceptance chain). The final QA of the assembled release — together
+with the release-level Performance Qualification — is recorded at the
+release-pipeline authorisation gate, not on the board.
 """
 
 from __future__ import annotations
@@ -10,7 +15,7 @@ from __future__ import annotations
 import datetime
 
 from project_enforcement.checkboxes import parse_checklist
-from project_enforcement.checks.preconditions.pq_review import evidence_user_exists
+from project_enforcement.checks.preconditions.user_acceptance import evidence_user_exists
 
 
 QA_CHECKLIST_LABELS = (
@@ -68,15 +73,15 @@ def check(item_meta, ctx, evidence) -> list[str]:
         if qa_date > today:
             reasons.append(f"`QA Signoff Date` `{qa_date_raw}` is in the future.")
 
-    pq_date_raw = (fields.get("PQ Signoff Date") or "").strip()
-    pq_date = _parse_date(pq_date_raw)
-    if qa_date and pq_date and qa_date < pq_date:
+    acceptance_date_raw = (fields.get("Acceptance Signoff Date") or "").strip()
+    acceptance_date = _parse_date(acceptance_date_raw)
+    if qa_date and acceptance_date and qa_date < acceptance_date:
         reasons.append(
-            f"`QA Signoff Date` (`{qa_date_raw}`) is earlier than `PQ Signoff Date` "
-            f"(`{pq_date_raw}`)."
+            f"`QA Signoff Date` (`{qa_date_raw}`) is earlier than `Acceptance Signoff Date` "
+            f"(`{acceptance_date_raw}`)."
         )
 
-    pq_approver = (fields.get("PQ Approver") or "").strip().lstrip("@")
+    acceptance_approver = (fields.get("Acceptance Approver") or "").strip().lstrip("@")
     if qa_approver:
         commit_authors: set[str] = set()
         for pr in evidence.linked_prs(repo, number):
@@ -89,9 +94,9 @@ def check(item_meta, ctx, evidence) -> list[str]:
             reasons.append(
                 f"`QA Approver` (`{qa_approver}`) authored commits on the linked PR — segregation of duties."
             )
-        if pq_approver and qa_approver == pq_approver:
+        if acceptance_approver and qa_approver == acceptance_approver:
             reasons.append(
-                f"`QA Approver` (`{qa_approver}`) is the same as `PQ Approver` — segregation of duties."
+                f"`QA Approver` (`{qa_approver}`) is the same as `Acceptance Approver` — segregation of duties."
             )
 
     # Deviation Ref required when any historical gxp-traceability run failed.

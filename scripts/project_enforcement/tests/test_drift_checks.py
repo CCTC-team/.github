@@ -106,9 +106,9 @@ class TestDateSanity:
         return ev
 
     def test_valid_date_does_not_comment(self):
-        ctx = _ctx(item_fields={"PQ Signoff Date": ""})
+        ctx = _ctx(item_fields={"Acceptance Signoff Date": ""})
         ev = self._evidence()
-        date_sanity.check(_change("PQ Signoff Date", "", datetime.date.today().isoformat()), ctx, ev)
+        date_sanity.check(_change("Acceptance Signoff Date", "", datetime.date.today().isoformat()), ctx, ev)
         assert ctx.actions.comments == []
 
     def test_future_date_comments(self):
@@ -125,14 +125,14 @@ class TestDateSanity:
         date_sanity.check(_change("QA Signoff Date", "", too_early), ctx, ev)
         assert any("before the issue was opened" in b for _, _, b in ctx.actions.comments)
 
-    def test_pq_after_qa_comments(self):
+    def test_acceptance_after_qa_comments(self):
         today = datetime.date.today()
         ev = self._evidence()
         ctx = _ctx(item_fields={"QA Signoff Date": today.isoformat()})
-        # PQ being set to the day after an already-recorded QA date.
-        pq_new = (today + datetime.timedelta(days=1)).isoformat()
-        date_sanity.check(_change("PQ Signoff Date", "", pq_new), ctx, ev)
-        assert any("PQ ≤ QA" in b or "after the QA" in b.lower() for _, _, b in ctx.actions.comments)
+        # Acceptance being set to the day after an already-recorded QA date.
+        acceptance_new = (today + datetime.timedelta(days=1)).isoformat()
+        date_sanity.check(_change("Acceptance Signoff Date", "", acceptance_new), ctx, ev)
+        assert any("Acceptance ≤ QA" in b or "after the QA" in b.lower() for _, _, b in ctx.actions.comments)
 
 
 # ============================== approver_identity_drift ==============================
@@ -142,15 +142,15 @@ class TestApproverIdentityDrift:
         ctx = _ctx(item_fields={"Status": "In development"})
         ev = StubEvidence()
         approver_identity_drift.check(
-            _change("PQ Approver", "alice", "bob"), ctx, ev,
+            _change("Acceptance Approver", "alice", "bob"), ctx, ev,
         )
         assert ctx.actions.comments == []
 
-    def test_change_after_pq_review_audit_logs(self):
+    def test_change_after_acceptance_audit_logs(self):
         ctx = _ctx(item_fields={"Status": "QA approved"})
         ev = StubEvidence()
         approver_identity_drift.check(
-            _change("PQ Approver", "alice", "bob"), ctx, ev,
+            _change("Acceptance Approver", "alice", "bob"), ctx, ev,
         )
         assert len(ctx.actions.comments) == 1
         _, _, body = ctx.actions.comments[0]
@@ -167,16 +167,53 @@ class TestApproverIdentityDrift:
 
 class TestTypeQualityConsistency:
     def test_consistent_combination_silent(self):
+        # Legacy alias: "Yes" behaves as Critical, PQ satisfies it.
         ctx = _ctx(item_fields={"Critical-to-Quality": "Yes", "Test Type": "PQ"})
         ev = StubEvidence()
         type_quality_consistency.check(_change("Test Type", "OQ", "PQ"), ctx, ev)
         assert ctx.actions.comments == []
 
     def test_inconsistent_combination_comments(self):
+        # Legacy alias: "Yes" + N/A is inconsistent.
         ctx = _ctx(item_fields={"Critical-to-Quality": "Yes", "Test Type": "N/A"})
         ev = StubEvidence()
         type_quality_consistency.check(_change("Test Type", "PQ", "N/A"), ctx, ev)
         assert any("inconsistent" in b.lower() or "Critical-to-Quality" in b for _, _, b in ctx.actions.comments)
+
+    def test_critical_with_na_comments_requiring_pq(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Critical", "Test Type": "N/A"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "PQ", "N/A"), ctx, ev)
+        assert len(ctx.actions.comments) == 1
+        _, _, body = ctx.actions.comments[0]
+        assert "PQ" in body
+
+    def test_critical_with_pq_silent(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Critical", "Test Type": "PQ"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "OQ", "PQ"), ctx, ev)
+        assert ctx.actions.comments == []
+
+    def test_important_with_na_comments_requiring_test_type_not_pq(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Important", "Test Type": "N/A"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "OQ", "N/A"), ctx, ev)
+        assert len(ctx.actions.comments) == 1
+        _, _, body = ctx.actions.comments[0]
+        assert "Test Type" in body
+        assert "includes PQ" not in body
+
+    def test_important_with_oq_silent(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Important", "Test Type": "OQ"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "N/A", "OQ"), ctx, ev)
+        assert ctx.actions.comments == []
+
+    def test_no_tier_with_na_silent(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "No", "Test Type": "N/A"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "OQ", "N/A"), ctx, ev)
+        assert ctx.actions.comments == []
 
     def test_ignores_unrelated_field(self):
         ctx = _ctx(item_fields={"Critical-to-Quality": "Yes", "Test Type": "N/A"})

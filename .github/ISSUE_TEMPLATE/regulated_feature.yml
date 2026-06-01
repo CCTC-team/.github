@@ -11,17 +11,27 @@ body:
 
         After creating the issue, add it to the validation project board (a copy of
         `[TEMPLATE] Regulated Feature Lifecycle`) and set the **Risk ID**,
-        **Requirement ID**, **Test Type**, **Critical-to-Quality**, **PQ Approver**,
-        **PQ Signoff Date**, **QA Approver**, **QA Signoff Date**, and
+        **Requirement ID**, **Test Type**, **Critical-to-Quality**, **Acceptance Approver**,
+        **Acceptance Signoff Date**, **QA Approver**, **QA Signoff Date**, and
         **Deviation Ref** fields on the card.
+
+        **Critical-to-Quality** classifies the feature's bearing on participant
+        safety and result reliability, mirroring the CtQ form's three-way
+        classification:
+        - **Critical** — compromise breaks participant safety or result
+          reliability. Requires a **Test Type** that includes PQ
+          (`PQ`, `OQ+PQ`, or `IQ+OQ+PQ`).
+        - **Important** — significant but not critical. Requires a verification
+          **Test Type**, but PQ is not mandatory and `N/A` is not acceptable.
+        - **No** — neither critical nor important. No Test Type constraint.
 
         The `User spec:` and `Feature link:` sections below are load-bearing —
         their exact labels are parsed by the gh-val validation tool. Do not
         rename them.
 
-        **The PQ / QA checkboxes below are enforced by board automation.**
+        **The acceptance / QA checkboxes below are enforced by board automation.**
         The project-enforcement workflow reads them from the issue body when a
-        card moves into PQ review / QA approved; unticked items block the move
+        card moves into User acceptance / QA approved; unticked items block the move
         with a `process-violation` comment + label. They are not just process
         guidance.
 
@@ -78,18 +88,21 @@ body:
       required: true
 
   - type: checkboxes
-    id: pq-review
+    id: user-acceptance
     attributes:
-      label: "PQ review checklist:"
+      label: "User acceptance checklist:"
       description: |
-        Performance Qualification. An end-user representative — not the
-        code author and not the test author — confirms the feature
-        works against the URS in the operational environment. Tick all
-        before advancing the card to PQ review status. The PQ Approver
-        and PQ Signoff Date fields on the project card must be set
-        before moving on to QA review.
+        User acceptance. An end-user representative — not the code author
+        and not the test author — confirms the feature meets the URS in a
+        development/test environment. This is a feature-level acceptance
+        check, NOT the formal Performance Qualification (PQ): the genuine
+        PQ is performed on the built release candidate in a qualified
+        environment at the release-pipeline authorisation gate, not on the
+        board. Tick all before advancing the card to User acceptance
+        status. The Acceptance Approver and Acceptance Signoff Date fields
+        on the project card must be set before moving on to QA review.
       options:
-        - label: Feature meets the user requirement in the operational environment
+        - label: Feature meets the user requirement against the URS in a development/test environment
         - label: Workflow is usable in practice (not just technically passing)
 
   - type: checkboxes
@@ -97,10 +110,14 @@ body:
     attributes:
       label: "QA review checklist:"
       description: |
-        QA process oversight. QA (not the code author, not the test
-        author, not the PQ reviewer) confirms the validation evidence
-        is complete and the URS → V&V → PQ chain is intact. Tick all
-        before advancing the card to QA approved. The QA Approver and
+        QA process oversight (development evidence). QA (not the code
+        author, not the test author, not the acceptance reviewer) confirms
+        the development validation evidence is complete and the
+        URS → V&V → user-acceptance chain is intact for this requirement.
+        This is feature-level QA of the development evidence — the final QA
+        of the assembled release, together with the release-level PQ, is
+        recorded at the release-pipeline authorisation gate, not here. Tick
+        all before advancing the card to QA approved. The QA Approver and
         QA Signoff Date fields on the project card must be set.
       options:
         - label: Risk linkage verified against the canonical risk register

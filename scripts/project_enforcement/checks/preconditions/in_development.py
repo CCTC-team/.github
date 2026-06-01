@@ -1,13 +1,14 @@
 """In development precondition.
 
-Assignee present, Iteration set, Test Type set. If Critical-to-Quality
-is Yes, Test Type must include PQ.
+Assignee present, Iteration set, Test Type set. A Critical
+Critical-to-Quality factor must have a Test Type that includes PQ;
+Important and No factors carry no PQ constraint (Important still needs
+a Test Type, caught by the generic "Test Type unset" rule).
 """
 
 from __future__ import annotations
 
-
-_CTQ_TEST_TYPES = {"PQ", "OQ+PQ", "IQ+OQ+PQ"}
+from project_enforcement import ctq
 
 
 def check(item_meta, ctx, evidence) -> list[str]:
@@ -33,11 +34,10 @@ def check(item_meta, ctx, evidence) -> list[str]:
     if not test_type:
         reasons.append("`Test Type` field is unset.")
 
-    ctq = (fields.get("Critical-to-Quality") or "").strip().lower()
-    if ctq == "yes" and test_type and test_type not in _CTQ_TEST_TYPES:
+    if ctq.tier(fields) == "critical" and test_type and test_type not in ctq.CRITICAL_TEST_TYPES:
         reasons.append(
-            f"`Critical-to-Quality=Yes` requires `Test Type` to include PQ "
-            f"(one of: {', '.join(sorted(_CTQ_TEST_TYPES))}); got `{test_type}`."
+            f"A Critical `Critical-to-Quality` factor requires `Test Type` to include PQ "
+            f"(one of: {', '.join(sorted(ctq.CRITICAL_TEST_TYPES))}); got `{test_type}`."
         )
 
     return reasons

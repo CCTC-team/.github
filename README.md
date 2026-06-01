@@ -35,6 +35,7 @@ For an overview of CCTC and the software we publish, see the
 | `scripts/compliance-drift.sh` | Drift-detection logic invoked by the workflow |
 | `rulesets/` | JSON definitions of the planned org-level category rulesets (applied via `gh api`) |
 | `docs/alcoa-sdlc-rationale.md` | Why signed commits are required across all regulated rulesets (inspector-facing) |
+| `docs/risk-proportionality-rationale.md` | Why the uniform `gcp-critical` ruleset + gate is a proportionate floor, not one-size-fits-all (inspector-facing) |
 | `docs/commit-signing-setup.md` | Developer-facing setup guide (SSH/GPG, runners, verification) |
 | `docs/compliance-drift-app-setup.md` | Runbook for provisioning the `CCTC Compliance Drift` GitHub App |
 | `docs/project-enforcement-app-setup.md` | Runbook for provisioning the token used by `project-enforcement.yml` (two options) |
@@ -210,7 +211,7 @@ and the validator runs on every PR. It checks:
 - README carries the banner marker
 - `last_reviewed` is within `review_cadence_months` (and not in the future)
 - `schema_version` is in the validator's supported set (controlled via
-  the `supported_schema_versions` input — currently `"1"`)
+  the `supported_schema_versions` input — currently `"1,2,3"`)
 
 ### Declaring the validated path scope
 
@@ -253,6 +254,45 @@ Rationale and rules:
   touch `.compliance.yml` should route through CODEOWNERS to a QA
   reviewer; ensure CODEOWNERS in regulated repos covers
   `/.compliance.yml`.
+
+### CtQ-factor and QMS-document anchors (schema v3)
+
+Schema v3 adds two fields that anchor the repo's controls to the trial's
+risk-based quality management, **required for `gcp-critical` from
+`schema_version: 3`** (a v2 `gcp-critical` file stays valid without them
+until it migrates):
+
+```yaml
+# Critical-to-Quality factors (CCTU/FRM129) this system safeguards.
+ctq_factors:
+  - frm129_ref: FRM129-XYZ-001#3
+    tier: critical          # critical | important
+    notes: Randomisation allocation integrity.
+
+# QMS documents governing this system's validation and risk management.
+governing_documents:
+  - ref: CCTU/SOP040
+    title: Risk Assessment Process for CTIMPs
+    role: risk-assessment   # risk-assessment | ctq-identification | csv | monitoring | change-control | other
+  - ref: CCTU/FRM129
+    role: ctq-identification
+```
+
+Rationale:
+
+- **`ctq_factors`** anchors the system to its FRM129 entry and tier so an
+  inspector can trace *CtQ factor → risk → requirement → V&V* as one
+  narrative. Under ICH E6(R3) Principle 6, fit-for-purpose validation of
+  computerised systems handling clinical data/endpoints is itself a CtQ
+  factor — so the software sits inside the RBQM narrative, not beside it.
+  The `tier` (`critical` / `important`) mirrors the board's three-tier
+  `Critical-to-Quality` field.
+- **`governing_documents`** is the pointer layer from source control into
+  the QMS — the SOPs, guidance and forms that govern validation and risk
+  management, each tagged with the `role` it satisfies. The granular
+  regulation register stays in the QMS; this is a pointer, not a copy.
+- See [`docs/risk-proportionality-rationale.md`](docs/risk-proportionality-rationale.md)
+  for how these fields express ICH E6(R3) Principle 7 proportionality.
 
 ### Traceability gate
 
@@ -319,6 +359,21 @@ The migration ritual for a breaking change:
 4. Once every repo is migrated, drop the old version from
    `supported_schema_versions` to retire it.
 
+The **v2 → v3** change (adding `ctq_factors` + `governing_documents`,
+required for `gcp-critical`) is a worked example of this ritual:
+
+1. The schema bumps to v3 and `supported_schema_versions` becomes
+   `"1,2,3"` — this must merge **before** any repo declares
+   `schema_version: 3`, or that repo would fail the "schema_version
+   supported" check. The v3 conditional is gated on
+   `schema_version >= 3`, so existing v2 `gcp-critical` files stay valid
+   without the new fields until they deliberately migrate.
+2. Drift pushes the new schema into every regulated repo.
+3. Per-repo PRs bump each `.compliance.yml` to v3 and add its
+   `ctq_factors` / `governing_documents`, at the team's pace.
+4. When every `gcp-critical` repo is on v3, `"1,2"` can be retired from
+   `supported_schema_versions`.
+
 ### How drift correction runs
 
 `compliance-drift.yml` runs nightly. It lists every repo where
@@ -377,6 +432,11 @@ rulesets rather than three — `gcp-supporting` and `data-protection`
 share enough that splitting them adds maintenance without adding
 controls, while `gcp-critical` carries hard regulatory hooks
 (segregation of duties, zero bypass) the others don't.
+
+The uniform `gcp-critical` ruleset is a deliberate **proportionate
+floor**, not a one-size-fits-all blanket; finer (ICH E6(R3) Principle 7)
+proportionality is delegated to FRM129 tiering and SOP040 risk
+evaluation ([rationale](docs/risk-proportionality-rationale.md)).
 
 #### Ruleset A — `cctc-gcp-critical`
 
@@ -527,27 +587,31 @@ suite of checks.
   `Archived`) are legal from anywhere and only restore to `Triage`.
 - **Per-column preconditions.** Entering `Risk linked` requires a
   `Risk ID` mirrored to the issue body; entering `Requirement defined`
-  adds Requirement ID + Critical-to-Quality; `In development` requires
-  an assignee, iteration, and (for critical work) a PQ-flavoured Test
-  Type; `Code review` requires an open linked PR; `V&V tests pass`
+  adds Requirement ID + a chosen Critical-to-Quality tier
+  (`Critical` / `Important` / `No`); `In development` requires an
+  assignee, iteration, a Test Type, and — for a `Critical` factor — a
+  PQ-flavoured Test Type (`Important` needs a Test Type but not PQ;
+  `No` is unconstrained); `Code review` requires an open linked PR; `V&V tests pass`
   requires green gxp-traceability + compliance checks on the PR and a
-  resolvable `.feature` URL on the default branch; `PQ review` /
-  `QA approved` require the issue's PQ / QA checkboxes ticked,
+  resolvable `.feature` URL on the default branch; `User acceptance` /
+  `QA approved` require the issue's acceptance / QA checkboxes ticked,
   approver usernames that resolve, segregation of duties across
-  author / PQ / QA, and (for QA) a `Deviation Ref` when any historical
+  author / Acceptance / QA, and (for QA) a `Deviation Ref` when any historical
   gxp-traceability run failed; `Released` requires the linked PR
   merged to the default branch and a release tag referencing the
   merge SHA.
 - **Field-drift.** Changes to `Risk ID` / `Requirement ID` that no
   longer match the issue body, signoff dates in the future or before
-  the issue was opened, PQ-after-QA, approver changes on cards already
-  past their review column, and `Critical-to-Quality=Yes` paired with
-  `Test Type=N/A` all fire comments.
+  the issue was opened, Acceptance-after-QA, approver changes on cards already
+  past their review column, and a Test-Type / Critical-to-Quality
+  mismatch (a `Critical` factor — including the legacy `Yes` — without a
+  PQ-bearing Test Type, or an `Important` factor with `Test Type=N/A`)
+  all fire comments.
 - **PR-driven promotion (forward-only).** A reusable workflow
   [`.github/workflows/project-card-promote.yml`](.github/workflows/project-card-promote.yml)
   moves cards from earlier states forward through `Code review` (on PR
   opened) and `V&V tests pass` (on green check_suite). Human-attested
-  states (`PQ review`, `QA approved`, `Released`) are never reached
+  states (`User acceptance`, `QA approved`, `Released`) are never reached
   by automation.
 - **Nightly audit.** [`.github/workflows/project-audit.yml`](.github/workflows/project-audit.yml)
   runs at 02:00 UTC, maintains one rolling
@@ -587,7 +651,7 @@ inline so the audit trail is here, not in chat:
 | `preconditions: In development` | _pending_ | |
 | `preconditions: Code review` | _pending_ | |
 | `preconditions: V&V tests pass` | _pending_ | |
-| `preconditions: PQ review` | _pending_ | |
+| `preconditions: User acceptance` | _pending_ | |
 | `preconditions: QA approved` | _pending_ | |
 | `preconditions: Released` | _pending_ | Depends on Phase 5 PR promoter being green |
 | `drift_id_mirror` | _pending_ | |
@@ -598,6 +662,21 @@ inline so the audit trail is here, not in chat:
 To flip a row, edit `.github/project-enforcement.yml` and replace this
 table cell with the date (`2026-MM-DD`) and the audit issue number
 that proves the evaluate week was clean.
+
+### Board `Critical-to-Quality` field migration
+
+The `Critical-to-Quality` single-select on each lifecycle board must
+gain the options **Critical / Important / No** to match the three-tier
+enforcement. This is org-admin board configuration applied via the board
+UI / API, not via this repo, so it is recorded here rather than enforced
+by code:
+
+- Add `Critical`, `Important`, `No` as options on the board's
+  `Critical-to-Quality` field.
+- Retain the legacy **Yes** option (hidden if the UI allows) until every
+  existing card is migrated off it. The enforcement code aliases `Yes`
+  → `Critical`, so old and new cards both validate during the
+  transition; remove `Yes` once no card uses it.
 
 ### App + secrets
 

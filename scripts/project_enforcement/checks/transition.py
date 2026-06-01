@@ -45,8 +45,8 @@ def check(change: CardChange, ctx) -> None:
         f"This card moved from {_format_value(change.old_value)} "
         f"to {_format_value(change.new_value)}. "
         "That skip is not permitted by the regulated lifecycle: forward moves "
-        "must advance one column at a time so each gate (Code review, V&V, PQ, "
-        "QA) has a chance to fire.\n\n"
+        "must advance one column at a time so each gate (Code review, V&V, "
+        "User acceptance, QA) has a chance to fire.\n\n"
         f"Mode: `{ctx.mode}`. "
         + (
             "The card has been left where it is for now — this gate is in "

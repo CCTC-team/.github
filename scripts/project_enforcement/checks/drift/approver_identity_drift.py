@@ -1,25 +1,25 @@
-"""When the PQ/QA Approver changes on a card past that column, log an
-audit comment. Does not revert — the change might be a legitimate
+"""When the Acceptance/QA Approver changes on a card past that column, log
+an audit comment. Does not revert — the change might be a legitimate
 correction; the goal is the audit trail.
 """
 
 from __future__ import annotations
 
 
-_PQ_REVIEW_STATUSES_OR_LATER = {"PQ review", "QA approved", "Released"}
+_ACCEPTANCE_STATUSES_OR_LATER = {"User acceptance", "QA approved", "Released"}
 _QA_APPROVED_STATUSES_OR_LATER = {"QA approved", "Released"}
 
 
 def check(change, ctx, evidence=None) -> None:
     if change.kind != "field_change":
         return
-    if change.field_name not in ("PQ Approver", "QA Approver"):
+    if change.field_name not in ("Acceptance Approver", "QA Approver"):
         return
 
     item = (ctx.snapshot or {}).get("items", {}).get(change.item_id, {})
     status = (item.get("fields") or {}).get("Status")
-    if change.field_name == "PQ Approver":
-        relevant = status in _PQ_REVIEW_STATUSES_OR_LATER
+    if change.field_name == "Acceptance Approver":
+        relevant = status in _ACCEPTANCE_STATUSES_OR_LATER
     else:
         relevant = status in _QA_APPROVED_STATUSES_OR_LATER
 
