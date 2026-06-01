@@ -114,6 +114,12 @@ class TestRequirementDefined:
         reasons = requirement_defined.check(item, _ctx(), ev)
         assert any("Critical-to-Quality" in r for r in reasons)
 
+    @pytest.mark.parametrize("value", ["Critical", "Important", "No"])
+    def test_passes_with_any_recognised_tier(self, value):
+        item = _item({"Requirement ID": "REQ-024", "Critical-to-Quality": value})
+        ev = self._evidence("### Requirement ID:\n\nREQ-024\n")
+        assert requirement_defined.check(item, _ctx(), ev) == []
+
     def test_fails_when_mismatch(self):
         item = _item({"Requirement ID": "REQ-024", "Critical-to-Quality": "Yes"})
         ev = self._evidence("### Requirement ID:\n\nREQ-999\n")
@@ -158,12 +164,48 @@ class TestInDevelopment:
         assert any("Test Type" in r for r in reasons)
 
     def test_fails_when_ctq_yes_and_test_type_excludes_pq(self):
+        # Legacy alias: a card still carrying "Yes" behaves as Critical.
         item = _item({
             "Assignees": "alice", "Iteration": "Sprint 1",
             "Test Type": "OQ", "Critical-to-Quality": "Yes",
         })
         reasons = in_development.check(item, _ctx(), self._evidence())
         assert any("include PQ" in r for r in reasons)
+
+    def test_fails_when_critical_and_test_type_excludes_pq(self):
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Test Type": "OQ", "Critical-to-Quality": "Critical",
+        })
+        reasons = in_development.check(item, _ctx(), self._evidence())
+        assert any("include PQ" in r for r in reasons)
+
+    def test_passes_when_important_with_non_pq_test_type(self):
+        # Important warrants a Test Type but not the PQ rigour reserved
+        # for Critical, so a non-PQ type is acceptable here.
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Test Type": "OQ", "Critical-to-Quality": "Important",
+        })
+        assert in_development.check(item, _ctx(), self._evidence()) == []
+
+    def test_fails_when_important_and_test_type_unset(self):
+        # Important still needs *some* Test Type — caught by the generic
+        # "Test Type unset" rule, not a PQ-specific one.
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Critical-to-Quality": "Important",
+        })
+        reasons = in_development.check(item, _ctx(), self._evidence())
+        assert any("Test Type" in r for r in reasons)
+        assert not any("include PQ" in r for r in reasons)
+
+    def test_passes_when_no_tier_with_non_pq_test_type(self):
+        item = _item({
+            "Assignees": "alice", "Iteration": "Sprint 1",
+            "Test Type": "OQ", "Critical-to-Quality": "No",
+        })
+        assert in_development.check(item, _ctx(), self._evidence()) == []
 
 
 # ============================== Code review ==============================

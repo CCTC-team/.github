@@ -332,7 +332,9 @@ relabel the infrastructure.
 ## Re-assessment triggers
 
 Re-run the questionnaire when **any** of the following happens, not
-only at the calendar review:
+only at the calendar review.
+
+**Software-classification triggers** — the system's own profile changes:
 
 - Scope change: trial adds EU sites, FDA exposure, or a SaMD-class
   feature.
@@ -342,6 +344,28 @@ only at the calendar review:
 - A `data-protection` system starts ingesting trial data, or vice versa.
 - Funder contract changes the security obligations (`infra-security`
   becomes mandatory).
+
+**Trial-level RBQM triggers** — the trial's risk picture changes around
+a system whose `regulatory_tier` may be unchanged. These come from the
+trial's risk-based quality management lifecycle (ICH E6(R3) Principle 7),
+not from the software itself, but they can still alter what this system
+must safeguard:
+
+- A **substantial modification** to the trial protocol that changes the
+  system's Critical-to-Quality / risk posture (even if `regulatory_tier`
+  is unchanged).
+- A **safety review** outcome (IDMC/TSC) or new safety signal affecting
+  data this system handles.
+- A **serious breach** or serious GCP non-compliance involving the
+  system.
+- **Audit or inspection findings** touching the system or its validation.
+- A change to the trial's **monitoring plan, KRIs or QTLs** that relies
+  on this system's outputs.
+
+A trial-level RBQM trigger may require updating `ctq_factors` and/or
+`governing_documents` in `.compliance.yml` — re-confirming the CtQ
+tiering and QMS citations — even when the regulatory category itself is
+unchanged.
 
 Each re-run updates `last_reviewed` and, if the answers changed, the
 relevant `.compliance.yml` fields and the org custom property.

@@ -147,6 +147,8 @@ regulatory tier does not require it.
 | `pid_boundary` | TODO (`separated` / `commingled` / `none`) | TODO (be honest about indirect re-identification risk — courier manifests, freezer locations, etc.) |
 | `retention_years` | TODO (integer; 25 for UK CT records) | TODO (cite the regulation driving the retention) |
 | `csv_evidence` | TODO (URL or repo path) | TODO (URS, FS, IQ, OQ, PQ, risk assessment — what's there and what's still missing) |
+| `ctq_factors` | TODO (FRM129 ref(s) + tier per factor) | TODO (which trial Critical-to-Quality factor(s) this system safeguards, and why the tier — `critical` vs `important` — is correct; this is the anchor that lets an inspector trace CtQ factor → risk → requirement → V&V) |
+| `governing_documents` | TODO (QMS doc refs + role per doc) | TODO (the SOPs / guidance / forms that govern this system's validation and risk management — e.g. CCTU/SOP040 risk-assessment, CCTU/FRM129 ctq-identification, the CSV SOP; the pointer from source control into the QMS) |
 
 ---
 
@@ -160,7 +162,8 @@ Tick each before the QA reviewer signs.
       and inspector-readiness values match what's in `.compliance.yml`.
 - [ ] If `regulatory_tier` = `gcp-critical`, the schema's
       conditional `allOf` requirements are satisfied (GAMP ∈ {4, 5},
-      all five inspector-readiness fields present).
+      all five inspector-readiness fields present; and on
+      `schema_version` 3, `ctq_factors` and `governing_documents` too).
 - [ ] If GAMP = 5 or `regulatory_tier` = `gcp-critical`, the
       `csv_evidence` link resolves and the pack covers URS / FS /
       IQ / OQ / PQ + risk assessment.
@@ -191,7 +194,12 @@ and an entry in the history table below.
 ## Re-assessment history
 
 Append a row each time the questionnaire is re-run. Do not delete
-previous rows.
+previous rows. A trial-level RBQM trigger — a substantial modification,
+safety review, serious breach, audit/inspection finding, or monitoring
+plan / KRI / QTL change (see the questionnaire's "Re-assessment
+triggers") — is a valid reason to append a row, not only a change to the
+regulatory category. Such a trigger may revise `ctq_factors` or
+`governing_documents` even when `regulatory_tier` is unchanged.
 
 | Date | Trigger | What changed vs previous | Assessor | QA reviewer |
 | --- | --- | --- | --- | --- |

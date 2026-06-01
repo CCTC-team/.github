@@ -167,16 +167,53 @@ class TestApproverIdentityDrift:
 
 class TestTypeQualityConsistency:
     def test_consistent_combination_silent(self):
+        # Legacy alias: "Yes" behaves as Critical, PQ satisfies it.
         ctx = _ctx(item_fields={"Critical-to-Quality": "Yes", "Test Type": "PQ"})
         ev = StubEvidence()
         type_quality_consistency.check(_change("Test Type", "OQ", "PQ"), ctx, ev)
         assert ctx.actions.comments == []
 
     def test_inconsistent_combination_comments(self):
+        # Legacy alias: "Yes" + N/A is inconsistent.
         ctx = _ctx(item_fields={"Critical-to-Quality": "Yes", "Test Type": "N/A"})
         ev = StubEvidence()
         type_quality_consistency.check(_change("Test Type", "PQ", "N/A"), ctx, ev)
         assert any("inconsistent" in b.lower() or "Critical-to-Quality" in b for _, _, b in ctx.actions.comments)
+
+    def test_critical_with_na_comments_requiring_pq(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Critical", "Test Type": "N/A"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "PQ", "N/A"), ctx, ev)
+        assert len(ctx.actions.comments) == 1
+        _, _, body = ctx.actions.comments[0]
+        assert "PQ" in body
+
+    def test_critical_with_pq_silent(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Critical", "Test Type": "PQ"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "OQ", "PQ"), ctx, ev)
+        assert ctx.actions.comments == []
+
+    def test_important_with_na_comments_requiring_test_type_not_pq(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Important", "Test Type": "N/A"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "OQ", "N/A"), ctx, ev)
+        assert len(ctx.actions.comments) == 1
+        _, _, body = ctx.actions.comments[0]
+        assert "Test Type" in body
+        assert "includes PQ" not in body
+
+    def test_important_with_oq_silent(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Important", "Test Type": "OQ"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "N/A", "OQ"), ctx, ev)
+        assert ctx.actions.comments == []
+
+    def test_no_tier_with_na_silent(self):
+        ctx = _ctx(item_fields={"Critical-to-Quality": "No", "Test Type": "N/A"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "OQ", "N/A"), ctx, ev)
+        assert ctx.actions.comments == []
 
     def test_ignores_unrelated_field(self):
         ctx = _ctx(item_fields={"Critical-to-Quality": "Yes", "Test Type": "N/A"})

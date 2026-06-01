@@ -15,6 +15,16 @@ body:
         **Acceptance Signoff Date**, **QA Approver**, **QA Signoff Date**, and
         **Deviation Ref** fields on the card.
 
+        **Critical-to-Quality** classifies the feature's bearing on participant
+        safety and result reliability, mirroring the CtQ form's three-way
+        classification:
+        - **Critical** — compromise breaks participant safety or result
+          reliability. Requires a **Test Type** that includes PQ
+          (`PQ`, `OQ+PQ`, or `IQ+OQ+PQ`).
+        - **Important** — significant but not critical. Requires a verification
+          **Test Type**, but PQ is not mandatory and `N/A` is not acceptable.
+        - **No** — neither critical nor important. No Test Type constraint.
+
         The `User spec:` and `Feature link:` sections below are load-bearing —
         their exact labels are parsed by the gh-val validation tool. Do not
         rename them.
