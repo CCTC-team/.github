@@ -35,7 +35,7 @@ preconditions:
   In development: evaluate
   Code review: evaluate
   V&V tests pass: evaluate
-  PQ review: evaluate
+  User acceptance: evaluate
   QA approved: evaluate
   Released: evaluate
 

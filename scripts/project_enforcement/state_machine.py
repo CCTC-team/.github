@@ -20,7 +20,7 @@ LIFECYCLE: tuple[str, ...] = (
     "In development",
     "Code review",
     "V&V tests pass",
-    "PQ review",
+    "User acceptance",
     "QA approved",
     "Released",
 )

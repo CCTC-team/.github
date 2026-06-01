@@ -275,9 +275,9 @@ Pure-Python unit, highest design value — write tests first (paired sub-items).
 
 - [ ] **2a. NEW (Tests):** `scripts/release/tests/test_notes.py`
   - Given a fixture set of milestone issues/PRs (closed, with `Risk ID:` /
-    `Requirement ID:` / `Feature link:` bodies, labels, PQ/QA approver fields), assert:
+    `Requirement ID:` / `Feature link:` bodies, labels, Acceptance/QA approver fields), assert:
     categorised changelog grouped by label; a traceability table with one row per
-    requirement (issue # → Risk ID → Requirement ID → `.feature` URL(s) → PQ approver/date
+    requirement (issue # → Risk ID → Requirement ID → `.feature` URL(s) → acceptance approver/date
     → QA approver/date); missing-field rows flagged `_missing_`; non-regulated issues
     listed but not in the traceability matrix; deterministic ordering.
   - Reuse the body-parsing regexes proven in `gxp-traceability.yml`

@@ -21,8 +21,8 @@ from project_enforcement.state_machine import LIFECYCLE, SIDE_EXITS, legal_trans
         ("Requirement defined", "In development"),
         ("In development", "Code review"),
         ("Code review", "V&V tests pass"),
-        ("V&V tests pass", "PQ review"),
-        ("PQ review", "QA approved"),
+        ("V&V tests pass", "User acceptance"),
+        ("User acceptance", "QA approved"),
         ("QA approved", "Released"),
     ],
 )
@@ -36,7 +36,7 @@ def test_one_step_forward_is_legal(old, new):
         ("Triage", "QA approved"),
         ("Triage", "In development"),
         ("Code review", "Released"),
-        ("Risk linked", "PQ review"),
+        ("Risk linked", "User acceptance"),
     ],
 )
 def test_skipping_forward_is_illegal(old, new):
@@ -49,7 +49,7 @@ def test_skipping_forward_is_illegal(old, new):
     "old,new",
     [
         ("Released", "Triage"),
-        ("PQ review", "In development"),
+        ("User acceptance", "In development"),
         ("QA approved", "Risk linked"),
         ("Released", "QA approved"),
     ],

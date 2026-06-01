@@ -6,7 +6,7 @@
 # merging — the stub assumes a UK academic CTU EDC posture (gcp-critical,
 # GAMP 5, no FDA/EMA submission, no EU sites, no clinical decisions).
 
-schema_version: 2
+schema_version: 3
 
 # Must match the `regulatory_tier` org custom property set on this repo.
 # - gcp-critical     — captures, transforms, or validates trial data
@@ -56,6 +56,27 @@ regulatory_pillars:
   - pillar: samd-aimd
     status: out-of-scope
     notes: System captures and stores trial data; does not make or guide clinical decisions.
+
+# Critical-to-Quality factors (CCTU/FRM129) this system supports.
+# The software's fit-for-purpose validation is itself a CtQ factor
+# under ICH E6(R3) Principle 6. Cite the FRM129 entry so an inspector
+# can trace CtQ factor -> risk register -> requirement -> V&V evidence.
+ctq_factors:
+  - frm129_ref: TODO-FRM129-<trial>#<row>
+    tier: critical          # critical | important
+    notes: TODO — which trial CtQ factor this system safeguards.
+
+# QMS documents that govern this system's validation and risk
+# management — the pointer from source control into the QMS.
+governing_documents:
+  - ref: CCTU/SOP040
+    title: Risk Assessment Process for CTIMPs
+    role: risk-assessment
+  - ref: CCTU/FRM129
+    title: Critical to Quality Factors Form
+    role: ctq-identification
+  - ref: TODO-CCTU/SOP-CSV
+    role: csv
 
 # Inspector-readiness fields (required for gcp-critical). These answer
 # the questions an MHRA inspector actually asks. Fill them in honestly —

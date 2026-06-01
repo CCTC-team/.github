@@ -149,7 +149,7 @@ required for `gcp-critical` repos still on `schema_version: 2`.
 
 ## Phase 1: Schema v3 — CtQ-factor and QMS-document anchors (gaps A, B)
 
-- [ ] **1a. MODIFY:** `compliance.schema.json`
+- [x] **1a. MODIFY:** `compliance.schema.json`
   - Update the `schema_version` property `description` to add:
     `v3 = adds ctq_factors + governing_documents, required for gcp-critical`.
   - Add two top-level properties:
@@ -209,13 +209,13 @@ required for `gcp-critical` repos still on `schema_version: 2`.
   - Note: do **not** raise the top-level `required` array — these
     fields are conditionally required only for v3 `gcp-critical`.
 
-- [ ] **1b. MODIFY:** `.github/workflows/compliance-check.yml`
+- [x] **1b. MODIFY:** `.github/workflows/compliance-check.yml`
   - Change the `supported_schema_versions` default from `"1,2"` to
     `"1,2,3"` (line 37). This is step 1 of the README migration ritual
     ("add the new version to the validator's supported set, keeping the
     old one") — it must merge **before** any repo bumps to v3.
 
-- [ ] **1c. MODIFY:** `templates/compliance/.compliance.yml.example`
+- [x] **1c. MODIFY:** `templates/compliance/.compliance.yml.example`
   - Bump `schema_version: 2` → `schema_version: 3`.
   - Add a `ctq_factors` block after `regulatory_pillars`, with a
     TODO-style entry and explanatory comment, e.g.:

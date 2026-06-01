@@ -531,23 +531,23 @@ suite of checks.
   an assignee, iteration, and (for critical work) a PQ-flavoured Test
   Type; `Code review` requires an open linked PR; `V&V tests pass`
   requires green gxp-traceability + compliance checks on the PR and a
-  resolvable `.feature` URL on the default branch; `PQ review` /
-  `QA approved` require the issue's PQ / QA checkboxes ticked,
+  resolvable `.feature` URL on the default branch; `User acceptance` /
+  `QA approved` require the issue's acceptance / QA checkboxes ticked,
   approver usernames that resolve, segregation of duties across
-  author / PQ / QA, and (for QA) a `Deviation Ref` when any historical
+  author / Acceptance / QA, and (for QA) a `Deviation Ref` when any historical
   gxp-traceability run failed; `Released` requires the linked PR
   merged to the default branch and a release tag referencing the
   merge SHA.
 - **Field-drift.** Changes to `Risk ID` / `Requirement ID` that no
   longer match the issue body, signoff dates in the future or before
-  the issue was opened, PQ-after-QA, approver changes on cards already
+  the issue was opened, Acceptance-after-QA, approver changes on cards already
   past their review column, and `Critical-to-Quality=Yes` paired with
   `Test Type=N/A` all fire comments.
 - **PR-driven promotion (forward-only).** A reusable workflow
   [`.github/workflows/project-card-promote.yml`](.github/workflows/project-card-promote.yml)
   moves cards from earlier states forward through `Code review` (on PR
   opened) and `V&V tests pass` (on green check_suite). Human-attested
-  states (`PQ review`, `QA approved`, `Released`) are never reached
+  states (`User acceptance`, `QA approved`, `Released`) are never reached
   by automation.
 - **Nightly audit.** [`.github/workflows/project-audit.yml`](.github/workflows/project-audit.yml)
   runs at 02:00 UTC, maintains one rolling
@@ -587,7 +587,7 @@ inline so the audit trail is here, not in chat:
 | `preconditions: In development` | _pending_ | |
 | `preconditions: Code review` | _pending_ | |
 | `preconditions: V&V tests pass` | _pending_ | |
-| `preconditions: PQ review` | _pending_ | |
+| `preconditions: User acceptance` | _pending_ | |
 | `preconditions: QA approved` | _pending_ | |
 | `preconditions: Released` | _pending_ | Depends on Phase 5 PR promoter being green |
 | `drift_id_mirror` | _pending_ | |
