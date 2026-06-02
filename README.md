@@ -602,8 +602,10 @@ suite of checks.
   merge SHA.
 - **Field-drift.** Changes to `Risk ID` / `Requirement ID` that no
   longer match the issue body, signoff dates in the future or before
-  the issue was opened, Acceptance-after-QA, approver changes on cards already
-  past their review column, and a Test-Type / Critical-to-Quality
+  the issue was opened, Acceptance-after-QA, approver changes on cards at or
+  past their review column **or on any card whose approver was already set** (so
+  an approver edited after the card is moved backward is still logged), and a
+  Test-Type / Critical-to-Quality
   mismatch (a `Critical` factor — including the legacy `Yes` — without a
   PQ-bearing Test Type, or an `Important` factor with `Test Type=N/A`)
   all fire comments.

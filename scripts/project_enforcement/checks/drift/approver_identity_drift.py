@@ -1,5 +1,7 @@
-"""When the Acceptance/QA Approver changes on a card past that column, log
-an audit comment. Does not revert — the change might be a legitimate
+"""When the Acceptance/QA Approver changes, log an audit comment if the card
+is at/after its review column, or if the approver field already held a value
+(which means the card has already been through its review column — even if it
+was since moved backward). Does not revert — the change might be a legitimate
 correction; the goal is the audit trail.
 """
 
@@ -18,10 +20,11 @@ def check(change, ctx, evidence=None) -> None:
 
     item = (ctx.snapshot or {}).get("items", {}).get(change.item_id, {})
     status = (item.get("fields") or {}).get("Status")
+    old_present = bool((change.old_value or "").strip())
     if change.field_name == "Acceptance Approver":
-        relevant = status in _ACCEPTANCE_STATUSES_OR_LATER
+        relevant = status in _ACCEPTANCE_STATUSES_OR_LATER or old_present
     else:
-        relevant = status in _QA_APPROVED_STATUSES_OR_LATER
+        relevant = status in _QA_APPROVED_STATUSES_OR_LATER or old_present
 
     if not relevant:
         return
@@ -32,7 +35,7 @@ def check(change, ctx, evidence=None) -> None:
         return
 
     body = (
-        f"**Approver drift — `{change.field_name}` changed on a card past its review column**\n\n"
+        f"**Approver drift — `{change.field_name}` changed on a reviewed card**\n\n"
         f"Card status: `{status}`\n"
         f"Previous approver: `{change.old_value or '_unset_'}`\n"
         f"New approver: `{change.new_value or '_unset_'}`\n\n"

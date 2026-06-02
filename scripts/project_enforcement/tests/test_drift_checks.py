@@ -138,13 +138,52 @@ class TestDateSanity:
 # ============================== approver_identity_drift ==============================
 
 class TestApproverIdentityDrift:
-    def test_change_before_relevant_column_silent(self):
+    def test_change_to_existing_approver_below_column_audit_logs(self):
+        # A card moved back below its review column, then the approver swapped.
+        # The previous approver value proves the card had been reviewed, so the
+        # swap must still be logged even though the current status is below the
+        # column.
         ctx = _ctx(item_fields={"Status": "In development"})
         ev = StubEvidence()
         approver_identity_drift.check(
             _change("Acceptance Approver", "alice", "bob"), ctx, ev,
         )
+        assert len(ctx.actions.comments) == 1
+        _, _, body = ctx.actions.comments[0]
+        assert "alice" in body and "bob" in body
+
+    def test_first_set_below_column_silent(self):
+        # An approver set for the first time before the card reaches its review
+        # column (empty previous value) is ordinary setup, not drift.
+        ev = StubEvidence()
+        for status in ("In development", "Triage"):
+            ctx = _ctx(item_fields={"Status": status})
+            approver_identity_drift.check(
+                _change("Acceptance Approver", "", "alice"), ctx, ev,
+            )
+            assert ctx.actions.comments == []
+
+    def test_first_set_below_qa_column_silent(self):
+        # A QA approver first-set at User acceptance is below the QA column and
+        # has no previous value, so it stays silent.
+        ctx = _ctx(item_fields={"Status": "User acceptance"})
+        ev = StubEvidence()
+        approver_identity_drift.check(
+            _change("QA Approver", "", "carol"), ctx, ev,
+        )
         assert ctx.actions.comments == []
+
+    def test_clearing_existing_approver_below_column_audit_logs(self):
+        # Clearing a previously-set approver after a move-back must be logged —
+        # the non-empty previous value means the card had been reviewed.
+        ctx = _ctx(item_fields={"Status": "Requirement defined"})
+        ev = StubEvidence()
+        approver_identity_drift.check(
+            _change("QA Approver", "carol", ""), ctx, ev,
+        )
+        assert len(ctx.actions.comments) == 1
+        _, _, body = ctx.actions.comments[0]
+        assert "carol" in body
 
     def test_change_after_acceptance_audit_logs(self):
         ctx = _ctx(item_fields={"Status": "QA approved"})

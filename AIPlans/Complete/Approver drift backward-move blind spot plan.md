@@ -104,7 +104,7 @@ minimal and self-contained.
 
 Test-first, paired sub-items — the unit is one pure-ish decision function.
 
-- [ ] **1a. MODIFY (tests):** `scripts/project_enforcement/tests/test_drift_checks.py`
+- [x] **1a. MODIFY (tests):** `scripts/project_enforcement/tests/test_drift_checks.py`
   - **Flip** `test_change_before_relevant_column_silent`: rename to
     `test_change_to_existing_approver_below_column_audit_logs` and assert the
     `_change("Acceptance Approver", "alice", "bob")` change at
@@ -123,7 +123,7 @@ Test-first, paired sub-items — the unit is one pure-ish decision function.
     with empty `old_value` it stays silent; add that as a guard case if not
     already implied.
 
-- [ ] **1b. MODIFY:** `scripts/project_enforcement/checks/drift/approver_identity_drift.py`
+- [x] **1b. MODIFY:** `scripts/project_enforcement/checks/drift/approver_identity_drift.py`
   - Change the `relevant` computation so that, after determining the column-based
     relevance, it is OR-ed with "the approver previously had a value":
 
@@ -149,7 +149,7 @@ Test-first, paired sub-items — the unit is one pure-ish decision function.
 
 ## Documentation
 
-- [ ] **MODIFY:** `README.md` (Field-drift bullet) — change the approver clause
+- [x] **MODIFY:** `README.md` (Field-drift bullet) — change the approver clause
   from "approver changes on cards already past their review column" to wording
   that covers the broadened trigger, e.g. "approver changes on cards at or past
   their review column, **or on any card whose approver was already set** (so an
@@ -160,18 +160,18 @@ Test-first, paired sub-items — the unit is one pure-ish decision function.
 
 ## Verification
 
-- [ ] **Enforcement tests pass:** `python3 -m pytest scripts/project_enforcement/tests/test_drift_checks.py`
+- [x] **Enforcement tests pass:** `python3 -m pytest scripts/project_enforcement/tests/test_drift_checks.py`
   — the flipped + new cases and all untouched approver cases are green.
-- [ ] **Full suite unaffected:** `python3 -m pytest scripts/project_enforcement/tests`
+- [x] **Full suite unaffected:** `python3 -m pytest scripts/project_enforcement/tests`
   — no collateral failures (the other three drift checks and the precondition /
   transition suites are independent of this change).
-- [ ] **Manual trace of the reported scenario:** a card at `Released` with
+- [x] **Manual trace of the reported scenario:** a card at `Released` with
   `Acceptance Approver: alice` → moved back to `In development` → `Acceptance
   Approver` edited to `bob`. Confirm `approver_identity_drift.check` on the
   `alice → bob` `field_change` (current status `In development`) now produces
   exactly one audit comment and **no** field write (no revert).
-- [ ] **Negative path:** a brand-new card at `Triage` with `Acceptance Approver`
+- [x] **Negative path:** a brand-new card at `Triage` with `Acceptance Approver`
   set for the first time (`"" → "alice"`) produces **no** comment — confirms the
   fix did not turn ordinary approver assignment into noise.
-- [ ] **Comment wording check:** the emitted body no longer claims the card is
+- [x] **Comment wording check:** the emitted body no longer claims the card is
   "past its review column" when the card's current status is below it.
