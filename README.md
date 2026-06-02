@@ -37,7 +37,7 @@ For an overview of CCTC and the software we publish, see the
 | `.github/project-enforcement.yml` | On/evaluate/active switchboard read by the poller + audit |
 | `scripts/project_enforcement/` | Python package: snapshot/diff, state machine, per-status preconditions, drift checks, audit, PR promoter decision logic |
 | `scripts/compliance-drift.sh` | Drift-detection logic invoked by the workflow |
-| `rulesets/` | JSON definitions of the planned org-level category rulesets (applied via `gh api`) |
+| `rulesets/` | JSON definitions of the org-level category rulesets (applied via `gh api`) |
 | `docs/alcoa-sdlc-rationale.md` | Why signed commits are required across all regulated rulesets (inspector-facing) |
 | `docs/risk-proportionality-rationale.md` | Why the uniform `gcp-critical` ruleset + gate is a proportionate floor, not one-size-fits-all (inspector-facing) |
 | `docs/commit-signing-setup.md` | Developer-facing setup guide (SSH/GPG, runners, verification) |
