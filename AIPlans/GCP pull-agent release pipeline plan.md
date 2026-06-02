@@ -3,7 +3,7 @@
 ## Context
 
 CCTC-team regulated repos have the *development* half of a GxP-defensible SDLC
-(org rulesets, signed commits, `.compliance.yml` v3 + schema, the `gxp-traceability`
+(org rulesets, signed commits, `.compliance.yml` + schema, the `gxp-traceability`
 PR gate, the `regulated_feature.yml` template, the "Regulated Feature Lifecycle"
 board, the `project-enforcement` / `project-card-promote` / `project-audit`
 workflows, getval validation docs). The *release* half is missing, and what exists
@@ -21,7 +21,7 @@ today is the anti-pattern this plan replaces:
 
 A prior plan (`AIPlans/Release process plan.md`) attempted this and was deleted on
 2026-06-01 because it was **founded on stale documentation** — it predated the
-`system_category`→`regulatory_tier` rename, schema **v3** (`ctq_factors`/FRM129 +
+`system_category`→`regulatory_tier` rename, the **CtQ schema additions** (`ctq_factors`/FRM129 +
 `governing_documents`/QMS anchors, three-tier RBQM), and the board rename
 "PQ review"→"User acceptance" (PQ-before-environment). Its release-engineering
 *bones* were sound; its compliance hooks described a system that no longer exists.
@@ -63,18 +63,25 @@ signed-tag targets) is called out as separate PRs.
   `.compliance.yml`-gated, evaluate/active workflow** (ubuntu-latest, Python venv
   with `pyyaml`/`pathspec`, untrusted issue/PR data never interpolated into shell).
   The release workflow mirrors its gate logic and security posture exactly.
-- `compliance.schema.json` — current **v3**: `regulatory_tier`
+- `compliance.schema.json` — `regulatory_tier`
   ∈ {gcp-critical, gcp-supporting, data-protection, none}; `gamp_category` ∈ {3,4,5};
   `ctq_factors[]` (`frm129_ref`, `tier` ∈ {critical, important}); `governing_documents[]`
-  (`ref`, `role`). `ctq_factors`+`governing_documents` required for `gcp-critical`.
-  The traceability matrix and gating read from these.
+  (`ref`, `role`), both **unconditionally** required for `gcp-critical`. The schema is a
+  single initial version (`schema_version: 1`) that already includes these; the
+  traceability matrix and gating read from them.
 - `scripts/project_enforcement/checks/preconditions/released.py` +
   `scripts/project_enforcement/evidence.py` (`release_for_sha`, `linked_prs`,
-  `default_branch`) — the board state machine. Board states:
-  `Risk linked → Requirement defined → Code review → User acceptance → Released`.
+  `default_branch`) — the board state machine. The full forward-only chain
+  (`state_machine.py`) is:
+  `Triage → Risk linked → Requirement defined → In development → Code review →
+  V&V tests pass → User acceptance → QA approved → Released`.
   **The `Released` gate is currently satisfied by any release *or bare tag*
-  referencing the merge SHA** — Phase 6 hardens it. Note **User acceptance precedes
-  the release/environment gate** — the design must respect that ordering.
+  referencing the merge SHA** — Phase 6 hardens it. Note the production
+  release/environment gate aligns with the **`QA approved → Released`** transition
+  (the last step before `Released`), so it fires after **both** `User acceptance` and
+  `QA approved` — the design must respect that ordering. There is a dedicated
+  `QA approved` status with its own `QA Approver` (segregation of duties enforced in
+  `qa_approved.py`); do not collapse it into `User acceptance`.
 - `~/repos/claude-org/rules/guides/regulated-gcp-systems.md` (Electronic Signatures
   section) — the org e-signature spec: **re-authentication at point of signing**,
   **binding a SHA-256 hash of the exact record version**, captured signer
@@ -125,18 +132,19 @@ signed-tag targets) is called out as separate PRs.
    set. *Why:* "release 1.4.0 validated REQ-024/031/040 covering CtQ FRM129-…" is
    defensible; per-commit micro-tags are not.
 
-5. **Traceability is CtQ-anchored, per schema v3.** The release notes' traceability
+5. **Traceability is CtQ-anchored, per the compliance schema.** The release notes' traceability
    matrix threads **CtQ factor (FRM129 ref + tier) → Risk ID → Requirement ID →
    `.feature` evidence → acceptance approver → QA approver**, and lists the
    `governing_documents` (QMS SOP/GD/FRM refs) that govern the release. *Why:* the
-   stale plan's matrix stopped at Risk/Requirement; schema v3 made CtQ→FRM129→QMS
+   stale plan's matrix stopped at Risk/Requirement; the schema made CtQ→FRM129→QMS
    the spine, and an inspector traces from the CtQ factor down. Read these from the
    repo's `.compliance.yml`, never assume.
 
 6. **The `production` GitHub Environment approval is the *gate* and the technical
    evidence; the regulatory e-signature of record is captured per the org spec —
    the approval alone is necessary but not sufficient.** A `production` Environment
-   with required reviewers (PQ/QA group) produces a logged, timestamped,
+   with required reviewers (the QA-approver group — the role that signs the board's
+   `QA approved` status) produces a logged, timestamped,
    attributable approval **bound to the exact image digest** (the digest *is* the
    record-version hash binding ICH E6(R3) requires). *But* a GitHub Environment
    approval does **not** force re-authentication at the moment of signing — an
@@ -149,8 +157,9 @@ signed-tag targets) is called out as separate PRs.
    rather than pretending a reviewer click is a Part-11 signature; documented
    residual gap, not a hidden one. (This is the core correction over the deleted
    plan, which treated the Environment approval *as* the e-signature.)
-   This gate fires **after** the board's `User acceptance` status (Decision 4 of the
-   board model), preserving PQ-before-environment ordering.
+   This gate aligns with the board's `QA approved → Released` transition — i.e. it
+   fires after **both** `User acceptance` and `QA approved` (Decision 4 of the board
+   model), preserving the PQ-before-environment ordering.
 
 7. **The release contract is a defined set of *logical*, tool-agnostic build targets
    owned by `claude-org`.** Every regulated repo's build MUST be able to do them;
@@ -262,7 +271,9 @@ and a *checker* — no release behaviour yet.
 - [ ] **0f. MODIFY:** `compliance.schema.json`
   - Add an optional `release_targets_path` (default `.github/release-targets.yml`) so
     the manifest location is discoverable/overridable, consistent with how
-    `validated_paths` etc. are declared. Bump the `schema_version` description note.
+    `validated_paths` etc. are declared. This is an additive, optional field — **no
+    `schema_version` bump** (the schema is a single initial version 1; a bump is only
+    for a breaking change, per the migration ritual still documented in `README.md`).
 
 ---
 
@@ -414,7 +425,8 @@ Configuration and process, not verifiable logic — TDD exception (noted inline)
 
 - [ ] **4b. NEW:** `docs/release-authorisation.md`
   - How to configure the `production` GitHub **Environment** with required reviewers
-    (PQ/QA group); the approval is **the gate and the technical evidence** —
+    (the QA-approver group — matching the board's `QA approved` gate); the approval is
+    **the gate and the technical evidence** —
     attributable, contemporaneous, **bound to the image digest** (the
     record-version-hash).
   - **The honest residual gap (Decision 6):** a GitHub Environment approval does not
@@ -426,7 +438,8 @@ Configuration and process, not verifiable logic — TDD exception (noted inline)
     referencing the release digest; the Environment approval enforces the technical
     gate. Map each property to the ICH E6(R3) e-signature expectations and mark which
     GitHub satisfies vs which the QMS supplies.
-  - Note the ordering: this gate fires **after** the board `User acceptance` status.
+  - Note the ordering: this gate aligns with the `QA approved → Released` transition —
+    it fires after **both** `User acceptance` and `QA approved`.
 
 - [ ] **4c. MODIFY:** `.github/workflows/release.yml`
   - When `environment` is set, the publish/`latest` job runs
@@ -551,14 +564,20 @@ inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
     other checks. *Why here:* makes the contract real on every PR, not only at release.
 
 - [ ] **7c. MODIFY:** `rulesets/cctc-gcp-critical.json` (and confirm
-  `cctc-critical-trial.json` / `cctc-regulated-non-critical.json`)
-  - Confirm `refs/heads/release/*` inherits the same PR-review + `required_signatures`
-    + `non_fast_forward`/`deletion` rules as `main`; document any gap rather than
-    silently widening scope.
-  - Add (or document adding) a **tag ruleset** protecting `refs/tags/v*` against
-    deletion and non-fast-forward — a published version tag becomes immutable (the
+  `cctc-regulated-non-critical.json`) — these are the only two ruleset files.
+  - `refs/heads/release/*` is **already** in `cctc-gcp-critical.json`'s `include` list
+    alongside `main`/`develop`, sharing the PR-review + `required_signatures` +
+    `non_fast_forward`/`deletion` rules — so this is a **verify-only** step; document
+    any gap rather than silently widening scope.
+  - Add a **tag ruleset** — a separate `target: tag` ruleset, not an addition to the
+    branch ruleset's `include` — protecting `refs/tags/v*` against deletion and
+    non-fast-forward, so a published version tag becomes immutable (the
     inspection-resilience payoff: a release tag can never be moved or re-pointed,
     matching the immutable image digest).
+  - **Caveat:** both org rulesets are currently in **evaluate (log-only)** mode, so
+    the tag-immutability and `release/*` guarantees do not actually enforce until they
+    are flipped to `active`. Either flip them here or document the dependency
+    (consistent with how this plan treats the e-signature residual gap).
 
 ---
 
@@ -571,9 +590,10 @@ inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
 
 - [ ] **8b. MODIFY:** `README.md` rollout-log table
   - Add rows: `release workflow (publish)`, `release workflow (vuln gate)`,
-    `preconditions: Released (hardened)`, `pull-agent (staging)`,
-    `pull-agent (production)` — all `_pending_`, with the "flip after one clean
-    evaluate cycle" note.
+    `pull-agent (staging)`, `pull-agent (production)` — all `_pending_`, with the
+    "flip after one clean evaluate cycle" note. **Update** the existing
+    `preconditions: Released` row (already in the table, currently noted as depending
+    on the PR promoter) to reflect the hardened gate — do not add a duplicate row.
 
 - [ ] **8c. MODIFY:** `docs/release-process.md`
   - Final "rollout" subsection: evaluate cuts a **draft** Release (full artifacts, no
