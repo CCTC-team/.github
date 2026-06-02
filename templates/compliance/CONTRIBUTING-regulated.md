@@ -114,6 +114,42 @@ reverted.
   `CCTC-team/.github`. Findings appear there overnight; the issue is
   auto-closed when the board is clean.
 
+## Releases & milestones
+
+Regulated changes are released in **milestones**, not per-commit. The
+mechanics:
+
+- **Assign your issue to the target milestone (`vX.Y.Z`).** One milestone
+  groups the requirement set for exactly one release. The release notes
+  trace every requirement in the milestone from its CtQ factor down — an
+  issue with no milestone is invisible to that matrix.
+- **A Release is a published, evidenced artifact — not a tag.** Cutting a
+  release builds and signs a container image in CI, pushes it to GHCR by
+  immutable digest, attaches the validation report, SBOM, checksums and the
+  CtQ traceability matrix, and records who authorised it. The server then
+  *pulls* that verified image; nothing pushes into production.
+- **A release cannot publish without a green validation report and a
+  verified image attestation.** The release workflow fails if the
+  `validation-docs` target produces no report, and the on-server agent
+  **refuses to deploy** any image whose provenance attestation does not
+  verify against the release workflow's identity. "It built" is not "it
+  released".
+- **The version tag must be signed**, the same as your commits. The build's
+  `tag` target creates a signed tag; the release workflow refuses an
+  unsigned one, and a tag ruleset stops a published `v*` tag being moved or
+  deleted.
+- **Production publish is gated by a `production` Environment approval** from
+  the QA-approver group, bound to the exact image digest. This aligns with
+  the board's `QA approved → Released` step — it happens after both
+  `User acceptance` and `QA approved`. Note the GitHub approval is the
+  technical gate; the formal re-authenticated electronic signature of record
+  is captured per the CTU SOP (in-app or in the QMS/eTMF), referencing the
+  release digest.
+
+The full model — the three layers, the artifact set and the clause each
+answers — is in
+[`CCTC-team/.github → docs/release-process.md`](https://github.com/CCTC-team/.github/blob/main/docs/release-process.md).
+
 ## How CI enforces what it can
 
 - `.compliance.yml` must parse and validate against the schema.

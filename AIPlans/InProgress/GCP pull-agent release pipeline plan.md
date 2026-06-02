@@ -207,7 +207,7 @@ The foundation. Until the contract exists, the workflow has nothing tool-agnosti
 bind to. Produces the *specification* (claude-org), the *binding schema* (.github),
 and a *checker* — no release behaviour yet.
 
-- [ ] **0a. NEW (separate PR to the org repo):** `~/repos/claude-org/rules/guides/build-and-release.md`
+- [x] **0a. NEW (separate PR to the org repo):** `~/repos/claude-org/rules/guides/build-and-release.md`
   - The canonical, tool-agnostic build-target contract. For each logical target: its
     responsibility, required output, and scope (**all** repos vs **regulated-only**).
     Lead with a table:
@@ -242,7 +242,7 @@ and a *checker* — no release behaviour yet.
     (the table around line 43-60) and cross-link from
     `essentials/regulated-gcp-checklist.md`.
 
-- [ ] **0b. NEW:** `release-targets.schema.json`
+- [x] **0b. NEW:** `release-targets.schema.json`
   - JSON Schema (sibling to `compliance.schema.json`) for the per-repo manifest: a
     `targets` map keyed by the canonical target names, each with `run` (command
     string) and optional `outputs` (array of globs); a top-level `image` block for
@@ -250,25 +250,25 @@ and a *checker* — no release behaviour yet.
     into); `version_pin_env`; informational `build_tool`. Mandatory-target presence
     is enforced by 0d (it depends on `regulatory_tier`), not the schema.
 
-- [ ] **0c. NEW:** `templates/compliance/release-targets.yml.example`
+- [x] **0c. NEW:** `templates/compliance/release-targets.yml.example`
   - A worked manifest **for TrialView** (hosted Blazor+API → GHCR image), every value
     commented as repo-specific and TODO-flagged so a new owner adapts rather than
     copies. Drift stubs this into regulated repos as `.github/release-targets.yml`
     (Phase 7).
 
-- [ ] **0d. NEW (Test):** `scripts/release/tests/test_contract.py`
+- [x] **0d. NEW (Test):** `scripts/release/tests/test_contract.py`
   - Pure-function tests for `contract.check_manifest(manifest, regulatory_tier)`:
     all-mandatory-present → ok; regulated repo missing `sbom` → flagged; regulated
     missing `validation-docs` → flagged; missing `tag` → flagged; unknown target name
     → flagged; non-regulated repo without `validation-docs` → ok. Deterministic
     ordering of returned problems.
 
-- [ ] **0e. NEW (Implementation):** `scripts/release/__init__.py`, `scripts/release/contract.py`
+- [x] **0e. NEW (Implementation):** `scripts/release/__init__.py`, `scripts/release/contract.py`
   - `check_manifest(manifest: dict, regulatory_tier: str) -> list[str]` returning the
     list of missing mandatory targets + any declared target not in the canonical set.
     Used by the release workflow (fail fast, Phase 3) and `compliance-check` (Phase 7).
 
-- [ ] **0f. MODIFY:** `compliance.schema.json`
+- [x] **0f. MODIFY:** `compliance.schema.json`
   - Add an optional `release_targets_path` (default `.github/release-targets.yml`) so
     the manifest location is discoverable/overridable, consistent with how
     `validated_paths` etc. are declared. This is an additive, optional field — **no
@@ -279,7 +279,7 @@ and a *checker* — no release behaviour yet.
 
 ## Phase 1: Milestone convention + release-notes config (docs, non-enforcing)
 
-- [ ] **1a. NEW:** `docs/release-process.md`
+- [x] **1a. NEW:** `docs/release-process.md`
   - The three-layer model (Decision 4) with a diagram: board status vs Milestone vs
     Release.
   - The **pull-agent** end-to-end flow: milestone `vX.Y.Z` → issues worked through
@@ -294,25 +294,41 @@ and a *checker* — no release behaviour yet.
     Inspector-facing "where is X" table.
   - SemVer `vMAJOR.MINOR.PATCH`, one milestone per release, milestone closed on publish.
 
-- [ ] **1b. NEW:** `templates/compliance/release.yml`
+- [x] **1b. NEW:** `templates/compliance/release.yml`
   - Ships into regulated repos as `.github/release.yml` (auto-notes categorisation).
     Categories keyed off existing labels: `regulated`/`validation` → "Validated
     requirements", `bug` → "Fixes", `security` → "Security", catch-all → "Other".
     `exclude` bot/automation labels. Header comment: the custom milestone-scoped
     generator (Phase 2) produces the authoritative notes; this only shapes the
     auto-section.
+  - **Deviation from plan:** there is no `regulated` label in `labels.json`; the
+    "Validated requirements" category is keyed off the labels that actually
+    exist (`validation`, `compliance`, `enhancement`). Added a `breaking-change`
+    category too (the label exists). Bots excluded via `exclude.authors`
+    (dependabot / github-actions) since no automation *label* exists to exclude.
 
-- [ ] **1c. MODIFY:** `templates/compliance/CONTRIBUTING-regulated.md`
+- [x] **1c. MODIFY:** `templates/compliance/CONTRIBUTING-regulated.md`
   - Add a "Releases & milestones" section: assign your issue to the target milestone;
     what a Release means; a release cannot publish without a green validation report
     and a verified image attestation.
 
-- [ ] **1d. MODIFY:** `README.md`
+- [x] **1d. MODIFY:** `README.md`
   - New "## Release process" section summarising the three layers + the pull-agent
     model, linking `docs/release-process.md`; add placeholder rows to the rollout-log
     table for the release workflow, vuln gate, hardened Released gate, and the agent
     (filled in Phase 8). Add `release-targets.schema.json`, the new workflow, and the
     templates to the "What's in here" table.
+  - **Deviation from plan:** the four release-pipeline placeholders live in a
+    *dedicated* "Release pipeline rollout log" table under the new Release
+    process section, not in the board's "Active-mode rollout log" table — they
+    flip via the caller `enforcement:` input / agent enablement, not
+    `project-enforcement.yml`, so co-locating them with board checks would be
+    misleading. The hardened `Released` precondition stays in the board table
+    (Phase 8b updates that row) and the new section links to it.
+  - **Deviation from plan:** the `.github/workflows/release.yml` "What's in here"
+    row is deferred to Phase 3 (when the file is actually created) so the README
+    never documents a non-existent file. The schema, `scripts/release/`,
+    `docs/release-process.md` and the templates rows were added now.
 
 ---
 
@@ -320,7 +336,7 @@ and a *checker* — no release behaviour yet.
 
 Pure-Python, highest design value — tests first.
 
-- [ ] **2a. NEW (Tests):** `scripts/release/tests/test_notes.py`
+- [x] **2a. NEW (Tests):** `scripts/release/tests/test_notes.py`
   - Fixtures: milestone issues/PRs (closed; bodies with `Risk ID:` / `Requirement ID:`
     / `Feature link:`; labels; acceptance/QA approver fields) **plus** a fixture
     `.compliance.yml` carrying `ctq_factors` and `governing_documents`. Assert:
@@ -332,8 +348,23 @@ Pure-Python, highest design value — tests first.
     deterministic ordering.
   - Reuse the body-parsing regexes proven in `gxp-traceability.yml`
     (`^[#\s>*-]*risk\s*id\s*:`) so behaviour matches the PR gate.
+  - **Deviation from plan:** reused `project_enforcement.body_parser.extract_field`
+    (the repo's *form-aware* extractor, documented as the corrected version of
+    that inline regex) instead of copying the `gxp-traceability.yml` regex string.
+    Rationale: issue-form bodies render as `### Risk ID:` headings with the value
+    on the next line, which the inline `…:\s*(.+)$` regex mis-handles; reusing the
+    single shared parser matches real rendering and avoids propagating the known
+    bug — consistent with the "go through the single source" convention.
+  - **Deviation from plan:** the matrix anchors each requirement to a CtQ factor
+    via a `CtQ factor:` field parsed from the issue body, with the *tier* resolved
+    from `.compliance.yml` `ctq_factors` (unknown ref → `(unknown)`, absent →
+    `_missing_`). The `regulated_feature.yml` issue template does not yet carry a
+    `CtQ factor:` field, so real matrices show `_missing_` in that column until the
+    template gains one — tracked as a follow-up (template edits are out of this
+    phase's `scripts/release` scope). Approver identity/date are carried on the
+    `MilestoneItem` (sourced from the board card), not parsed from the body.
 
-- [ ] **2b. NEW (Implementation):** `scripts/release/notes.py`
+- [x] **2b. NEW (Implementation):** `scripts/release/notes.py`
   - `build_notes(repo, milestone, tag, prev_tag, compliance, evidence) -> str`.
     Queries milestone issues/PRs via `gh api`/GraphQL, parses bodies, reads
     `ctq_factors`/`governing_documents` from the parsed `.compliance.yml`, emits
@@ -344,11 +375,11 @@ Pure-Python, highest design value — tests first.
   - Security posture of `gxp-traceability.yml`: untrusted issue/PR bodies read from
     files / passed as data, **never** interpolated into shell or Python source.
 
-- [ ] **2c. NEW (Tests):** `scripts/release/tests/test_sbom_scan.py`
+- [x] **2c. NEW (Tests):** `scripts/release/tests/test_sbom_scan.py`
   - Fixtures for clean / high / critical grype JSON; assert non-zero counts +
     markdown summary text.
 
-- [ ] **2d. NEW (Implementation):** `scripts/release/sbom_scan.py`
+- [x] **2d. NEW (Implementation):** `scripts/release/sbom_scan.py`
   - Thin pure wrapper: parse grype JSON, return count of critical/high, format a
     step-summary markdown block. Scanner invocation itself lives in the workflow.
 
@@ -356,7 +387,24 @@ Pure-Python, highest design value — tests first.
 
 ## Phase 3: Reusable release workflow (build image → attest → sign → GHCR → Release)
 
-- [ ] **3a. NEW:** `.github/workflows/release.yml` (reusable, `on: workflow_call`)
+- [x] **3a. NEW:** `.github/workflows/release.yml` (reusable, `on: workflow_call`)
+  - **Deviation from plan:** added a small **tested** helper `scripts/release/manifest.py`
+    (+ `test_manifest.py`, 10 tests) so the workflow reads the manifest through unit-tested
+    accessors / a CLI rather than inline YAML parsing — keeps the YAML thin and the
+    binding in one tested place. Also: the reusable workflow checks out `CCTC-team/.github`
+    (the tooling) into `_release-tooling` so `scripts/release/*` is importable in the
+    caller's run context (a `tooling_ref` input, default `main`, controls which ref).
+  - **Deviation from plan:** the `publish:registry` target must export the pushed
+    sha256 digest to `$GITHUB_ENV` under the manifest's `image.digest_env`; the
+    workflow reads it back (env from a child process can't otherwise return). Documented
+    in the workflow and the example manifest. Tag-signature verification is a
+    *presence* check (annotated tag carrying a PGP/SSH signature block) — full trust
+    verification needs the runner's key/allowed-signers store (operational follow-up).
+  - **Deviation from plan:** the `environment` input is declared now but the job-level
+    `environment:` wiring + authorisation-block fill is deferred to Phase 4c (per the
+    plan's own split), avoiding an empty-string-environment footgun in Phase 3.
+    Release-notes approver columns render `_missing_` until board-card enrichment lands
+    (same follow-up as the CtQ template-field gap).
   - **Inputs:** `compliance_path` (default `.compliance.yml`), `tag` (the `v*` ref),
     `milestone` (default: derive from tag), `enforcement`
     (`evaluate`|`active`, default `evaluate` — controls vuln gate + draft-vs-publish),
@@ -400,7 +448,7 @@ Pure-Python, highest design value — tests first.
   - Write a `$GITHUB_STEP_SUMMARY` table: image digest, every attached asset +
     checksum, attestation status (the inspector-facing manifest).
 
-- [ ] **3b. NEW:** `templates/compliance/release-caller.yml`
+- [x] **3b. NEW:** `templates/compliance/release-caller.yml`
   - Thin caller shipped as `.github/workflows/release.yml` in the regulated repo,
     `on: push: tags: ['v*']`, declaring the permissions above and
     `uses: CCTC-team/.github/.github/workflows/release.yml@main` with
@@ -413,7 +461,7 @@ Pure-Python, highest design value — tests first.
 
 Configuration and process, not verifiable logic — TDD exception (noted inline).
 
-- [ ] **4a. Contract requirement — the `tag` target produces a SIGNED tag.** Part of
+- [x] **4a. Contract requirement — the `tag` target produces a SIGNED tag.** Part of
   the canonical contract (Phase 0a): every repo's `tag` target must `git tag -s`
   (not `-a`), so the released version carries the same cryptographic attribution the
   commit ruleset already requires. The release workflow verifies the signature
@@ -422,8 +470,14 @@ Configuration and process, not verifiable logic — TDD exception (noted inline)
     `Tag version in git` (`build.fs:979`) uses `git tag -a` → change to `git tag -s`
     and provision the signing key on its build runner. This repo only documents the
     requirement; each product repo brings its own `tag` target into compliance.
+  - **Satisfied in-scope; product-repo fix STUBBED.** The contract requirement is in
+    claude-org `build-and-release.md` (§"`tag` must be signed", and called out in the
+    worked example), and `release.yml` refuses an unsigned tag. The CCTC_Components
+    `build.fs` `git tag` → `git tag -s` change is a product-repo edit, out of the
+    agreed scope (.github + claude-org only), so its checkbox here covers only the
+    org-level requirement; the product PR is deferred to a separate session.
 
-- [ ] **4b. NEW:** `docs/release-authorisation.md`
+- [x] **4b. NEW:** `docs/release-authorisation.md`
   - How to configure the `production` GitHub **Environment** with required reviewers
     (the QA-approver group — matching the board's `QA approved` gate); the approval is
     **the gate and the technical evidence** —
@@ -441,15 +495,25 @@ Configuration and process, not verifiable logic — TDD exception (noted inline)
   - Note the ordering: this gate aligns with the `QA approved → Released` transition —
     it fires after **both** `User acceptance` and `QA approved`.
 
-- [ ] **4c. MODIFY:** `.github/workflows/release.yml`
+- [x] **4c. MODIFY:** `.github/workflows/release.yml`
   - When `environment` is set, the publish/`latest` job runs
     `environment: ${{ inputs.environment }}` so it blocks on required reviewers. The
     notes' `## Release authorisation` block is filled with approver identity + UTC
     timestamp (from the deployment record) + the image digest.
+  - **Note:** approver identity comes from
+    `repos/{repo}/actions/runs/{run_id}/approvals`; the UTC timestamp is captured at
+    the (post-approval) publish job as the contemporaneous deployment-record time.
 
 ---
 
 ## Phase 5: The pull-agent (server-structure)
+
+> **STUBBED — out of scope for this execution.** Phase 5 lives entirely in
+> `~/repos/server-structure`, outside the agreed scope (`.github` + `claude-org`
+> only). All Phase 5 items are intentionally left unchecked and deferred to a
+> separate server-structure session. The `.github`-side hooks the agent depends
+> on (the published-Release artifact set, the signer-workflow identity, the
+> verification contract) are delivered by Phases 3/4/6 here.
 
 The heart of the new model. Lives in `~/repos/server-structure`. Replaces the
 inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
@@ -520,36 +584,48 @@ inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
 
 ## Phase 6: Harden the "Released" board precondition (TDD)
 
-- [ ] **6a. NEW (Tests):** extend `scripts/project_enforcement/tests/test_evidence.py`
+- [x] **6a. NEW (Tests):** extend `scripts/project_enforcement/tests/test_evidence.py`
   - For a new `published_release_for_sha`: draft release matching the SHA → not
     satisfied; published release matching the SHA but **without** the validation asset
     → not satisfied; published release **with** the validation asset (and, behind a
     config flag, a verifiable provenance attestation) → satisfied (returns release
     meta); a **bare tag** pointing at the SHA → not satisfied (the regression the old
     `release_for_sha` allowed).
+  - **Deviation from plan:** tests target the pure selector `_select_published_release`
+    (draft/bare-tag/no-asset/with-asset/tag-resolves-elsewhere). The validation-asset
+    and provenance-flag *policy* (satisfied vs not) is asserted at the precondition
+    level in `test_preconditions.py` (6c), because the config flag lives on `ctx`, not
+    in evidence — `published_release_for_sha` returns the matching published Release
+    (with `has_validation_asset`) so the precondition can give a precise reason.
 
-- [ ] **6b. MODIFY:** `scripts/project_enforcement/evidence.py`
+- [x] **6b. MODIFY:** `scripts/project_enforcement/evidence.py`
   - Add `published_release_for_sha(self, repo, sha) -> Optional[ReleaseMeta]` to the
     protocol, `GhEvidence`, and the fake. Real impl: page `/repos/{repo}/releases`,
     require `draft == false`, resolve the release tag to the SHA via the tag ref (not
     a `target_commitish` string match), and inspect `assets[].name` for the
     validation-report pattern. Keep or replace the sole `release_for_sha` caller.
 
-- [ ] **6c. MODIFY:** `scripts/project_enforcement/checks/preconditions/released.py`
+- [x] **6c. MODIFY:** `scripts/project_enforcement/checks/preconditions/released.py`
   - Replace `release_for_sha` with `published_release_for_sha`. Precise reasons: "no
     published Release references merge SHA", or "Release `vX.Y.Z` references the SHA
     but has no validation report attached — the release workflow must run in active
     mode and succeed". Optional provenance-attestation requirement behind a config
     flag (default off until the workflow is active everywhere).
+  - Also updated the README "What it enforces" `Released` bullet to match the
+    hardened behaviour. `release_for_sha` + `StubEvidence.releases` removed entirely
+    (sole caller replaced); `GhEvidence` resolves each release tag to its commit via
+    the tag ref (annotated tags dereferenced), never `target_commitish`.
 
-- [ ] **6d. MODIFY:** preconditions wiring / `__init__.py` if the new evidence method
+- [x] **6d. MODIFY:** preconditions wiring / `__init__.py` if the new evidence method
   needs registering; run `test_handler_smoke.py` to confirm no signature drift.
+  - No registry change needed (the status→check map is unchanged). `test_handler_smoke.py`
+    passes; full enforcement + release suites green (271).
 
 ---
 
 ## Phase 7: Ship via compliance-drift + ruleset confirmation
 
-- [ ] **7a. MODIFY:** compliance-drift stubbing (`scripts/compliance-drift.sh` +
+- [x] **7a. MODIFY:** compliance-drift stubbing (`scripts/compliance-drift.sh` +
   `.github/workflows/compliance-drift.yml`)
   - Add to the idempotent, only-when-absent stub set:
     `templates/compliance/release.yml` → `.github/release.yml`,
@@ -557,14 +633,29 @@ inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
     `templates/compliance/release-targets.yml.example` → `.github/release-targets.yml`
     (TODO-flagged so the owner fills in their build commands/paths).
 
-- [ ] **7b. MODIFY:** `.github/workflows/compliance-check.yml`
+- [x] **7b. MODIFY:** `.github/workflows/compliance-check.yml`
   - For regulated repos, load `.github/release-targets.yml` and run
     `scripts/release/contract.py` (Phase 0e): a regulated repo missing a mandatory
     target (no `tag`/`validation-docs`/`sbom`/…) is flagged. evaluate→active like the
     other checks. *Why here:* makes the contract real on every PR, not only at release.
+  - **Note:** added a `contract_enforcement` input (default `evaluate`) gating just
+    this step (schema validation stays a hard fail) and a `tooling_ref` input; the
+    workflow checks out `CCTC-team/.github` into `_release-tooling` to import
+    `release.contract`. An absent manifest is itself flagged.
 
-- [ ] **7c. MODIFY:** `rulesets/cctc-gcp-critical.json` (and confirm
+- [x] **7c. MODIFY:** `rulesets/cctc-gcp-critical.json` (and confirm
   `cctc-regulated-non-critical.json`) — these are the only two ruleset files.
+  - **Done:** verified `refs/heads/release/*` is present in `cctc-gcp-critical.json`
+    (verify-only, no change). Added `rulesets/cctc-tag-immutability.json` — a separate
+    `target: tag` ruleset over `refs/tags/v*` for all regulated tiers, zero bypass,
+    `non_fast_forward` + `deletion`, `enforcement: evaluate`. Documented as "Ruleset C"
+    in README + the apply command + the evaluate-mode flip caveat.
+  - **Deviation from plan:** scoped the tag ruleset to **all** regulated tiers
+    (`gcp-critical` + `gcp-supporting` + `data-protection`), not just gcp-critical,
+    since every regulated repo now releases via the pipeline and a published tag should
+    be immutable regardless of tier. Rulesets left in `evaluate` (not flipped to
+    `active`) — flipping is an org-admin `gh api` action gated on a clean evaluate
+    cycle; documented the dependency and prompting the user separately.
   - `refs/heads/release/*` is **already** in `cctc-gcp-critical.json`'s `include` list
     alongside `main`/`develop`, sharing the PR-review + `required_signatures` +
     `non_fast_forward`/`deletion` rules — so this is a **verify-only** step; document
@@ -583,19 +674,22 @@ inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
 
 ## Phase 8: Evaluate → active rollout
 
-- [ ] **8a. MODIFY:** `.github/project-enforcement.yml`
+- [x] **8a. MODIFY:** `.github/project-enforcement.yml`
   - Keep `preconditions: Released: evaluate` until the release workflow has cut at
     least one real published Release with all artifacts green **and** the agent has
     performed one verified pull-deploy on staging. Document the dependency inline.
 
-- [ ] **8b. MODIFY:** `README.md` rollout-log table
+- [x] **8b. MODIFY:** `README.md` rollout-log table
   - Add rows: `release workflow (publish)`, `release workflow (vuln gate)`,
     `pull-agent (staging)`, `pull-agent (production)` — all `_pending_`, with the
     "flip after one clean evaluate cycle" note. **Update** the existing
     `preconditions: Released` row (already in the table, currently noted as depending
     on the PR promoter) to reflect the hardened gate — do not add a duplicate row.
+  - The four placeholder rows were already added in Phase 1d (the dedicated "Release
+    pipeline rollout log" table); 8b updated the board table's `preconditions: Released`
+    row note to the hardened published-Release gate + the staging-deploy dependency.
 
-- [ ] **8c. MODIFY:** `docs/release-process.md`
+- [x] **8c. MODIFY:** `docs/release-process.md`
   - Final "rollout" subsection: evaluate cuts a **draft** Release (full artifacts, no
     auto-deploy — the agent ignores drafts per Phase 5a) so the team inspects output;
     active publishes, enforces the vuln gate + the `production` Environment approval,
@@ -605,73 +699,100 @@ inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
 
 ## Documentation
 
-- [ ] **NEW:** `~/repos/claude-org/rules/guides/build-and-release.md` — the
+- [x] **NEW:** `~/repos/claude-org/rules/guides/build-and-release.md` — the
   tool-agnostic build-target contract (Phase 0a); register in `general.md` Tier-2
   table; cross-link from `essentials/regulated-gcp-checklist.md`.
-- [ ] **NEW:** `docs/release-process.md` (Phase 1a) and `docs/release-authorisation.md`
+- [x] **NEW:** `docs/release-process.md` (Phase 1a) and `docs/release-authorisation.md`
   (Phase 4b).
-- [ ] **MODIFY:** `README.md` — release-process section, rollout log, "What's in here"
+- [x] **MODIFY:** `README.md` — release-process section, rollout log, "What's in here"
   table (Phases 1d, 8b).
-- [ ] **MODIFY:** `templates/compliance/CONTRIBUTING-regulated.md` — Releases &
+- [x] **MODIFY:** `templates/compliance/CONTRIBUTING-regulated.md` — Releases &
   milestones section (Phase 1c).
-- [ ] **MODIFY:** `~/repos/server-structure/DEPLOYMENT_RUNBOOK.md` and
+- [ ] **STUBBED (out of scope):** `~/repos/server-structure/DEPLOYMENT_RUNBOOK.md` and
   `VERSIONED_BUILDS_GUIDE.md` — the SSH-push deploy steps are **superseded by the
   pull-agent**; document the agent install (systemd template), the GHCR-image compose
   change, the audit log location, and the rollback recipe. Flag the old inbound-SSH
   steps as retired (do not silently delete — note when/why they changed).
-- [ ] **MODIFY:** `~/repos/TrialView/CLAUDE.md` and `~/repos/CCTC_Components/CLAUDE.md`
+  *(Deferred with Phase 5 to a separate server-structure session.)*
+- [ ] **STUBBED (out of scope):** `~/repos/TrialView/CLAUDE.md` and `~/repos/CCTC_Components/CLAUDE.md`
   — the local `dotnet run --project ./build.fsproj` deploy is replaced by: build
   pushes a signed tag → CI release workflow → agent deploys. Note the `tag` target
   must become `git tag -s` and the manifest (`.github/release-targets.yml`) must be
-  filled in.
-- [ ] **MODIFY:** `~/repos/claude-org/rules/guides/regulated-gcp-systems.md` — add a
+  filled in. *(Product-repo edits, deferred to a separate session.)*
+- [x] **MODIFY:** `~/repos/claude-org/rules/guides/regulated-gcp-systems.md` — add a
   short cross-reference from §4.3.5 (release) and the Electronic Signatures section to
   `docs/release-authorisation.md`, recording where the release e-signature of record
   is captured (Decision 6).
+- [x] **MODIFY (wiki, per CLAUDE.md):** reconciled `~/repos/.github.wiki` to the repo
+  (full reconciliation, user-approved). Rewrote `Release-Process.md`,
+  `Release-Build-Contract.md`, `Release-Multi-Repo.md` to the pull-agent /
+  container-image-by-digest model; added the tag ruleset to
+  `Branch-Protection-Rulesets.md`; added `release_targets_path` and **fixed the
+  pre-existing v1/v2/v3 staleness → single version 1** in `Compliance-Schema.md`,
+  `Compliance-Framework.md`, `Compliance-Check-Workflow.md`; documented the
+  contract-check step + new inputs in `Compliance-Check-Workflow.md`; added the release
+  stubs to `Compliance-Drift-Workflow.md`; hardened the `Released` gate in
+  `Project-Board-Enforcement.md`; added all new files to `Repository-Layout.md`;
+  tidied `_Sidebar.md`.
 
 ---
 
 ## Verification
 
-- [ ] The build-target contract guide exists in `claude-org`, is registered in the
+**Verified offline (this session):**
+
+- [x] The build-target contract guide exists in `claude-org`, is registered in the
   rules index, and lists every canonical target with scope; the CCTC_Components
-  mapping is labelled "example, not normative".
-- [ ] `contract.py` accepts a complete manifest and flags a regulated manifest missing
-  `validation-docs`/`sbom`/`tag` and any unknown target name (`pytest`).
-- [ ] **Tool-agnostic proof:** `release.yml` contains no repo-specific path, filename,
+  mapping is labelled "example, not normative". *(grep-confirmed.)*
+- [x] `contract.py` accepts a complete manifest and flags a regulated manifest missing
+  `validation-docs`/`sbom`/`tag` and any unknown target name (`pytest`). *(11 tests.)*
+- [x] **Tool-agnostic proof:** `release.yml` contains no repo-specific path, filename,
   or build command (no `getval`, no `build/config/...`, no image-name literal) — every
-  build action reads from `.github/release-targets.yml`. `grep` confirms.
-- [ ] A second, deliberately different manifest (e.g. MSBuild/`dotnet`-only, no FAKE)
-  drives the same workflow to a successful dry-run release.
-- [ ] All workflow YAML lints clean (`actionlint`); `release.yml`'s `workflow_call`
-  inputs resolve from `release-caller.yml`.
-- [ ] `scripts/release/` and `scripts/project_enforcement/` unit tests pass, including
+  build action reads from `.github/release-targets.yml`. `grep` confirms. *(grep clean;
+  3 `manifest --run` bindings via the `run_target` helper.)*
+- [x] **Contract side of the "second manifest" check:** a deliberately different
+  MSBuild-only (no FAKE) manifest satisfies `contract.check_manifest` for
+  `gcp-critical`. *(The full workflow dry-run is the live item below.)*
+- [x] `scripts/release/` and `scripts/project_enforcement/` unit tests pass, including
   contract checker, CtQ-anchored notes generator, sbom-scan, and
-  `published_release_for_sha` regression.
-- [ ] `~/repos/server-structure/agent/` unit tests pass, including the
-  `REFUSE`-on-failed-verification and `NONE`-on-draft cases.
+  `published_release_for_sha` regression. *(271 passed.)*
+- [x] Hardened `released` gate: a card whose PR merged with only a **bare tag** is
+  **not** advanced to Released; the same card after a published Release with the
+  validation asset **is** allowed. *(TestReleased, 8 cases.)*
+
+**Deferred — require live CI / GitHub / a runner (cannot run offline):**
+
+- [ ] All workflow YAML lints clean (`actionlint`); `release.yml`'s `workflow_call`
+  inputs resolve from `release-caller.yml`. *(actionlint install was blocked this
+  session; all 9 workflow YAMLs parse via PyYAML. Run `actionlint` when available.)*
+- [ ] A second, deliberately different manifest drives the same workflow to a
+  successful **dry-run release** *(live; contract side proven above)*.
 - [ ] End-to-end dry run on the **test** repo (Project 31): push a `v0.0.x-rc` tag →
   workflow in `evaluate` builds the image, pushes to GHCR by digest, attests
   provenance + SBOM, cuts a **draft** Release with notes + CtQ traceability matrix +
   validation report + SBOM + `SHA256SUMS`; step-summary manifest complete.
 - [ ] `gh attestation verify <image>@<digest> --repo … --signer-workflow …` succeeds
   for the produced image and **fails** for an image built outside the release workflow.
-- [ ] Agent dry run on **staging**: with a published staging Release, the agent
-  verifies, pulls the digest, `up -d --no-deps`, passes `verify:staging`, and writes
-  an audit-log line; with a tampered/foreign digest it logs `REFUSE` and does not pull.
-- [ ] Hardened `released` gate: a card whose PR merged with only a **bare tag** is
-  **not** advanced to Released; the same card after a published Release with the
-  validation asset **is** allowed.
 - [ ] Vulnerability gate: a seeded critical advisory fails the release in `active` and
-  only warns in `evaluate`.
+  only warns in `evaluate`. *(`sbom_scan` logic unit-tested; live gate behaviour is CI.)*
 - [ ] `production` Environment approval blocks publish/`latest` until a required
   reviewer approves; approver + UTC + image digest land in the Release authorisation
   block.
-- [ ] Tag ruleset confirmed: a published `v*` tag cannot be deleted or moved.
-- [ ] Signed-tag check: the workflow refuses to publish an unsigned tag.
+- [ ] Tag ruleset confirmed: a published `v*` tag cannot be deleted or moved. *(Ruleset
+  authored in `evaluate`; needs applying + flipping to `active` to actually enforce.)*
+- [ ] Signed-tag check: the workflow refuses to publish an unsigned tag. *(Logic present
+  in `release.yml`; provable only on a live runner.)*
 - [ ] `compliance-drift` dry run stubs `.github/release.yml` + caller +
   `release-targets.yml` into a regulated repo and nothing into a
-  `regulatory_tier: none` repo.
+  `regulatory_tier: none` repo. *(Stub logic added + `bash -n` clean; needs `gh` auth +
+  cloned repos to exercise.)*
+
+**Stubbed — out of scope (server-structure):**
+
+- [ ] `~/repos/server-structure/agent/` unit tests pass, including the
+  `REFUSE`-on-failed-verification and `NONE`-on-draft cases. *(Phase 5, deferred.)*
+- [ ] Agent dry run on **staging**: verify → pull digest → `up -d --no-deps` →
+  `verify:staging` → audit-log line; tampered digest → `REFUSE`. *(Phase 5, deferred.)*
 
 ---
 

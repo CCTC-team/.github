@@ -1,0 +1,28 @@
+{
+  "name": "cctc-tag-immutability",
+  "target": "tag",
+  "enforcement": "evaluate",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/tags/v*"
+      ],
+      "exclude": []
+    },
+    "repository_property": {
+      "include": [
+        {
+          "name": "regulatory_tier",
+          "source": "custom",
+          "property_values": ["gcp-critical", "gcp-supporting", "data-protection"]
+        }
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "non_fast_forward" },
+    { "type": "deletion" }
+  ]
+}

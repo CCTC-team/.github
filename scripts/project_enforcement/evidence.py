@@ -45,6 +45,51 @@ class IssueMeta:
 import re
 
 
+@dataclass
+class ReleaseMeta:
+    """A published GitHub Release whose tag resolves to a given commit."""
+
+    tag: str
+    sha: str
+    url: str = ""
+    has_validation_asset: bool = False
+    has_provenance: bool = False
+
+
+# An attached asset is the release's validation report if its filename looks
+# like one. The release workflow names it from the manifest's declared output;
+# this pattern is deliberately loose so "validation-report.md",
+# "validation_report.pdf", "trialview-validation-report-1.4.0.md" all match.
+_VALIDATION_ASSET_RE = re.compile(r"validation[\s._-]*report", re.I)
+
+
+def _select_published_release(releases, tag_to_sha, sha):
+    """Return the first *published* release whose tag resolves to ``sha``.
+
+    ``releases`` is the GitHub releases payload; ``tag_to_sha`` maps each
+    release tag to the commit it points at, resolved via the tag ref (an
+    annotated tag dereferenced to its commit) — never a ``target_commitish``
+    string match. Drafts and bare tags (tags with no Release object) never
+    match. The returned meta flags whether a validation-report asset is
+    attached, so the caller can apply its own policy and give a precise reason.
+    """
+    for rel in releases or []:
+        if rel.get("draft"):
+            continue
+        tag = rel.get("tag_name") or ""
+        if not tag or tag_to_sha.get(tag) != sha:
+            continue
+        assets = [(a.get("name") or "") for a in (rel.get("assets") or [])]
+        has_validation = any(_VALIDATION_ASSET_RE.search(n) for n in assets)
+        return ReleaseMeta(
+            tag=tag,
+            sha=sha,
+            url=rel.get("html_url") or "",
+            has_validation_asset=has_validation,
+        )
+    return None
+
+
 # Conclusion values on a check-run that indicate a previous failure
 # the QA precondition should refuse to wave through without a Deviation Ref.
 _FAILED_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "CANCELLED", "STARTUP_FAILURE"}
@@ -111,7 +156,7 @@ class EvidenceLike(Protocol):
     def compliance_yml(self, repo: str) -> Optional[dict]: ...
     def default_branch(self, repo: str) -> str: ...
     def url_exists(self, url: str) -> bool: ...
-    def release_for_sha(self, repo: str, sha: str) -> bool: ...
+    def published_release_for_sha(self, repo: str, sha: str) -> Optional[ReleaseMeta]: ...
 
 
 class GhEvidence:
@@ -305,27 +350,46 @@ class GhEvidence:
         except Exception:
             return False
 
-    def release_for_sha(self, repo, sha):
+    def published_release_for_sha(self, repo, sha):
         if not sha:
-            return False
+            return None
         try:
             out = subprocess.run(
                 ["gh", "api", f"/repos/{repo}/releases", "--paginate"],
                 check=True, capture_output=True, text=True,
             ).stdout
-            data = json.loads(out)
-            for release in data:
-                if (release.get("target_commitish") or "") == sha:
-                    return True
-            # Fall back to checking tags pointing at the SHA.
-            out_tags = subprocess.run(
-                ["gh", "api", f"/repos/{repo}/git/matching-refs/tags/", "--paginate"],
+            releases = json.loads(out)
+            # Resolve each release tag to the commit it points at via the tag
+            # ref (dereferencing annotated tags), not the target_commitish
+            # string — a bare branch name in target_commitish must never count.
+            tag_to_sha: dict[str, str] = {}
+            for rel in releases:
+                tag = rel.get("tag_name")
+                if tag and tag not in tag_to_sha:
+                    resolved = self._tag_commit_sha(repo, tag)
+                    if resolved:
+                        tag_to_sha[tag] = resolved
+            return _select_published_release(releases, tag_to_sha, sha)
+        except subprocess.CalledProcessError:
+            return None
+
+    def _tag_commit_sha(self, repo, tag):
+        """The commit SHA a tag points at, dereferencing annotated tags."""
+        try:
+            out = subprocess.run(
+                ["gh", "api", f"/repos/{repo}/git/ref/tags/{tag}"],
                 check=True, capture_output=True, text=True,
             ).stdout
-            tags = json.loads(out_tags)
-            return any((t.get("object") or {}).get("sha") == sha for t in tags)
+            obj = (json.loads(out) or {}).get("object") or {}
+            if obj.get("type") == "tag":
+                tag_out = subprocess.run(
+                    ["gh", "api", f"/repos/{repo}/git/tags/{obj.get('sha')}"],
+                    check=True, capture_output=True, text=True,
+                ).stdout
+                return ((json.loads(tag_out) or {}).get("object") or {}).get("sha")
+            return obj.get("sha")
         except subprocess.CalledProcessError:
-            return False
+            return None
 
 
 @dataclass
@@ -337,7 +401,7 @@ class StubEvidence:
     compliance: dict[str, dict] = field(default_factory=dict)
     branches: dict[str, str] = field(default_factory=dict)
     urls: set[str] = field(default_factory=set)
-    releases: set[tuple[str, str]] = field(default_factory=set)
+    published_releases: dict[tuple[str, str], ReleaseMeta] = field(default_factory=dict)
 
     def issue(self, repo, number):
         return self.issues.get((repo, number))
@@ -354,5 +418,5 @@ class StubEvidence:
     def url_exists(self, url):
         return url in self.urls
 
-    def release_for_sha(self, repo, sha):
-        return (repo, sha) in self.releases
+    def published_release_for_sha(self, repo, sha):
+        return self.published_releases.get((repo, sha))

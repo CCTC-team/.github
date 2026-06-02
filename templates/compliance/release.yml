@@ -1,0 +1,42 @@
+# Release-notes auto-categorisation for this repository.
+#
+# Ships into regulated repos as `.github/release.yml` (pushed by the
+# compliance-drift workflow). GitHub uses it to group the auto-generated
+# "what changed" section of a Release by the labels on merged PRs.
+#
+# ⚠️ This only shapes GitHub's *auto* changelog section. The authoritative,
+#    inspector-facing release notes — the milestone-scoped summary and the
+#    CtQ → Risk → Requirement traceability matrix — are produced by the
+#    release workflow's notes generator (scripts/release/notes.py in
+#    CCTC-team/.github) and are what a release is judged on. This file just
+#    keeps the auto-section tidy underneath them.
+#
+# Categories are keyed off the canonical org labels (labels.json).
+
+changelog:
+  exclude:
+    # Keep automation/bot noise out of the human-facing changelog.
+    authors:
+      - dependabot
+      - dependabot[bot]
+      - github-actions
+      - github-actions[bot]
+  categories:
+    - title: ⚕️ Validated requirements
+      labels:
+        - validation
+        - compliance
+        - enhancement
+    - title: 🐛 Fixes
+      labels:
+        - bug
+    - title: 🔒 Security
+      labels:
+        - security
+    - title: ⚠️ Breaking changes
+      labels:
+        - breaking-change
+    - title: 📝 Other changes
+      # Catch-all — any merged PR not matched above.
+      labels:
+        - "*"

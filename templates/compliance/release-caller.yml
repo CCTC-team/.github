@@ -1,0 +1,39 @@
+# Release pipeline for this regulated repo.
+#
+# Ships as `.github/workflows/release.yml` (pushed by the compliance-drift
+# workflow). A push of a `v*` tag triggers the org's reusable release workflow,
+# which builds and signs the container image, pushes it to GHCR by digest,
+# attests provenance + SBOM, and cuts a Release with the validation evidence.
+#
+# All repo-specific binding (build commands, image ref, report/SBOM paths) lives
+# in `.github/release-targets.yml` — there is deliberately nothing repo-specific
+# here.
+#
+# Rollout: start in `enforcement: evaluate` (cuts a DRAFT Release with the full
+# artifact set; the pull-agent ignores drafts, so nothing auto-deploys). Once
+# you have watched a clean draft-Release cycle, flip to `enforcement: active`
+# (publishes a gated Release and fails on critical/high vulnerabilities). To gate
+# production publication on QA reviewers, also set `environment: production`
+# (see docs/release-authorisation.md).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      packages: write
+      issues: read
+      pull-requests: read
+    uses: CCTC-team/.github/.github/workflows/release.yml@main
+    with:
+      tag: ${{ github.ref_name }}
+      enforcement: evaluate
+      # environment: production   # uncomment to gate publish on required reviewers

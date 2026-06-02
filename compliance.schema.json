@@ -126,6 +126,11 @@
         "minLength": 1
       }
     },
+    "release_targets_path": {
+      "description": "Path to this repo's release-targets manifest (the binding between the canonical build-target contract and this repo's build commands; schema: release-targets.schema.json). Optional; the release and compliance-check workflows default to `.github/release-targets.yml` when omitted. Override only if the manifest lives elsewhere.",
+      "type": "string",
+      "minLength": 1
+    },
     "ctq_factors": {
       "description": "Critical-to-Quality factors (CCTU/FRM129) this system supports or safeguards. ICH E6(R3) Principle 6 treats fit-for-purpose validation of computerised systems handling clinical data/endpoints as a CtQ factor; this anchors the system to its FRM129 entry so an inspector can trace CtQ factor -> risk -> requirement -> V&V. Required for gcp-critical.",
       "type": "array",

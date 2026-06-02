@@ -1,0 +1,471 @@
+name: Release (reusable)
+
+# Reusable release workflow for regulated repos. Builds and signs a container
+# image in CI, pushes it to GHCR by immutable digest, attests provenance + SBOM
+# over that image, and cuts a GitHub Release carrying the validation evidence.
+# The on-server pull-agent verifies the attestation and deploys the digest;
+# nothing here ever pushes into a server.
+#
+# Every build action is bound through the caller repo's
+# .github/release-targets.yml manifest (schema: release-targets.schema.json) —
+# this workflow hardcodes NO repo-specific path, filename, or build command.
+#
+# Security posture mirrors gxp-traceability.yml: untrusted issue/PR bodies are
+# read from files and passed to Python as data, never interpolated into a shell
+# or into Python source. The manifest's `run` strings ARE executed — that is the
+# repo's own trusted build config (like a Makefile), by design (Decision 8).
+#
+# enforcement input:
+#   "evaluate" (default) — cut a DRAFT Release with the full artifact set; the
+#       vulnerability scan warns but does not fail. The pull-agent ignores drafts,
+#       so nothing auto-deploys. Use this to inspect output during rollout.
+#   "active" — cut a PUBLISHED Release; the vulnerability scan fails on
+#       critical/high; if `environment` is set, publish blocks on the required
+#       reviewers of that Environment.
+#
+# Caller example (.github/workflows/release.yml in a regulated repo): see
+# templates/compliance/release-caller.yml.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "The v* tag to release (e.g. v1.4.0). Must be a signed tag."
+        type: string
+        required: true
+      milestone:
+        description: "Milestone title scoping this release. Defaults to the tag."
+        type: string
+        default: ""
+      compliance_path:
+        description: "Path to .compliance.yml in the caller repo."
+        type: string
+        default: ".compliance.yml"
+      enforcement:
+        description: "evaluate | active. evaluate cuts a draft and warns on vulns; active publishes and fails on critical/high."
+        type: string
+        default: "evaluate"
+      environment:
+        description: "Optional GitHub Environment gating publish (e.g. production). When set, publish blocks on its required reviewers."
+        type: string
+        default: ""
+      tooling_ref:
+        description: "Ref of CCTC-team/.github to load the release tooling (scripts/release) from."
+        type: string
+        default: "main"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # When `environment` is set (e.g. production), the whole job — including the
+    # publish step — blocks on that Environment's required reviewers. Empty
+    # string means no Environment gate. See docs/release-authorisation.md.
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      packages: write
+      issues: read
+      pull-requests: read
+    env:
+      TAG: ${{ inputs.tag }}
+      ENFORCEMENT: ${{ inputs.enforcement }}
+      COMPLIANCE_PATH: ${{ inputs.compliance_path }}
+      REPO: ${{ github.repository }}
+      STATE_DIR: ${{ github.workspace }}/_release-state
+      TOOLING: ${{ github.workspace }}/_release-tooling/scripts
+    steps:
+      # 1. Caller repo at the release tag (full history for tag verification).
+      - name: Checkout caller at the release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      # 2. The release tooling (this repo's scripts/release) alongside the caller.
+      - name: Checkout release tooling
+        uses: actions/checkout@v6
+        with:
+          repository: CCTC-team/.github
+          ref: ${{ inputs.tooling_ref }}
+          path: _release-tooling
+
+      - name: Set up Python
+        run: |
+          python3 -m venv /tmp/release
+          /tmp/release/bin/pip install --quiet --upgrade pip
+          /tmp/release/bin/pip install --quiet 'pyyaml>=6'
+          mkdir -p "$STATE_DIR"
+
+      # Gate: regulated repos only. Not regulated (no .compliance.yml, or
+      # regulatory_tier == none) -> every later step is skipped, job succeeds.
+      - name: Gate on regulatory tier
+        id: gate
+        run: |
+          if [ ! -f "$COMPLIANCE_PATH" ]; then
+            echo "No $COMPLIANCE_PATH — repo not regulated; nothing to release."
+            echo "applicable=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tier=$(/tmp/release/bin/python <<'PY'
+          import os, yaml
+          d = yaml.safe_load(open(os.environ["COMPLIANCE_PATH"])) or {}
+          print(d.get("regulatory_tier") or "")
+          PY
+          )
+          if [ "$tier" = "none" ] || [ -z "$tier" ]; then
+            echo "regulatory_tier=$tier — release workflow not applicable."
+            echo "applicable=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "regulatory_tier=$tier"
+          echo "applicable=true" >> "$GITHUB_OUTPUT"
+          echo "tier=$tier" >> "$GITHUB_OUTPUT"
+
+      # Resolve the manifest path (compliance.release_targets_path or default),
+      # then fail fast if a mandatory target for this tier is missing/unknown.
+      - name: Resolve manifest and check the build-target contract
+        if: steps.gate.outputs.applicable == 'true'
+        env:
+          TIER: ${{ steps.gate.outputs.tier }}
+        run: |
+          manifest_path=$(/tmp/release/bin/python <<'PY'
+          import os, yaml
+          d = yaml.safe_load(open(os.environ["COMPLIANCE_PATH"])) or {}
+          print(d.get("release_targets_path") or ".github/release-targets.yml")
+          PY
+          )
+          echo "MANIFEST=$manifest_path" >> "$GITHUB_ENV"
+          if [ ! -f "$manifest_path" ]; then
+            echo "::error file=$manifest_path::release-targets manifest not found. A regulated repo must declare its build targets."
+            exit 1
+          fi
+          PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
+          import os, sys, yaml
+          from release import contract
+          m = yaml.safe_load(open(os.environ["MANIFEST"])) or {}
+          problems = contract.check_manifest(m, os.environ["TIER"])
+          if problems:
+              for p in problems:
+                  print(f"::error::release-targets contract: {p}")
+              sys.exit(1)
+          print("Build-target contract satisfied.")
+          PY
+
+      # Refuse to release an unsigned tag. A lightweight tag (no tag object) or
+      # an annotated tag without a signature block is rejected. Full trust
+      # verification depends on the runner's key/allowed-signers store; presence
+      # of a signature proves `git tag -s` was used.
+      - name: Verify the release tag is signed
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          obj_type=$(git cat-file -t "$TAG" || true)
+          if [ "$obj_type" != "tag" ]; then
+            echo "::error::$TAG is not an annotated tag object — it cannot be signed. Use 'git tag -s'."
+            exit 1
+          fi
+          if ! git cat-file -p "$TAG" | grep -qE 'BEGIN (PGP|SSH) SIGNATURE'; then
+            echo "::error::$TAG carries no signature. Regulated releases require a signed tag ('git tag -s')."
+            exit 1
+          fi
+          echo "$TAG is a signed annotated tag."
+
+      - name: Derive version and pin it for the build
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          version="${TAG#v}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          pin_env=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --version-pin-env || true)
+          if [ -n "$pin_env" ]; then
+            echo "$pin_env=$version" >> "$GITHUB_ENV"
+            echo "Pinned $pin_env=$version"
+          fi
+          image_ref=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --image-ref || true)
+          echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
+          digest_env=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --digest-env || true)
+          echo "DIGEST_ENV=$digest_env" >> "$GITHUB_ENV"
+
+      # Build -> package (OCI image) -> publish to GHCR by digest. Building here,
+      # in the hardened runner, is what the provenance attestation covers.
+      # The publish:registry target MUST export the pushed digest to $GITHUB_ENV
+      # under the manifest's image.digest_env (e.g. APP_IMAGE_DIGEST=sha256:...).
+      - name: Build, package, and publish the image
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          run_target() {
+            local name="$1" optional="${2:-}"
+            local cmd
+            if ! cmd=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --run "$name"); then
+              if [ "$optional" = "optional" ]; then
+                echo "Target '$name' not declared — skipping."
+                return 0
+              fi
+              echo "::error::Mandatory target '$name' is not declared in $MANIFEST."
+              return 1
+            fi
+            echo "::group::$name"
+            echo "+ $cmd"
+            bash -c "$cmd"
+            echo "::endgroup::"
+          }
+          run_target build
+          run_target package
+          run_target "publish:registry"
+
+      - name: Resolve the pushed image digest
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          if [ -z "$DIGEST_ENV" ]; then
+            echo "::error::No image.digest_env declared in the manifest; cannot resolve the pushed digest."
+            exit 1
+          fi
+          digest="${!DIGEST_ENV}"
+          if ! echo "$digest" | grep -qE '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::The publish:registry target did not export a valid sha256 digest to \$$DIGEST_ENV (got '${digest:-<empty>}'). It must write e.g. $DIGEST_ENV=sha256:... to \$GITHUB_ENV."
+            exit 1
+          fi
+          echo "IMAGE_DIGEST=$digest" >> "$GITHUB_ENV"
+          echo "IMAGE=${IMAGE_REF}@${digest}" >> "$GITHUB_ENV"
+          echo "Released image: ${IMAGE_REF}@${digest}"
+
+      # SBOM (regulated-mandatory) -> vulnerability scan.
+      - name: Generate the SBOM
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          cmd=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --run sbom)
+          echo "+ $cmd"
+          bash -c "$cmd"
+          PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --outputs sbom > "$STATE_DIR/sbom-globs.txt"
+          # Resolve the first matching SBOM file from the declared globs.
+          sbom_file=""
+          while IFS= read -r glob; do
+            for f in $glob; do
+              if [ -f "$f" ]; then sbom_file="$f"; break 2; fi
+            done
+          done < "$STATE_DIR/sbom-globs.txt"
+          if [ -z "$sbom_file" ]; then
+            echo "::error::The sbom target produced no file matching its declared outputs."
+            exit 1
+          fi
+          echo "SBOM_FILE=$sbom_file" >> "$GITHUB_ENV"
+          echo "SBOM: $sbom_file"
+
+      - name: Install grype
+        if: steps.gate.outputs.applicable == 'true'
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Vulnerability scan
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          grype "sbom:$SBOM_FILE" -o json > "$STATE_DIR/grype.json" || true
+          blocking=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
+          import json, os
+          from release import sbom_scan
+          with open(os.path.join(os.environ["STATE_DIR"], "grype.json")) as f:
+              data = json.load(f)
+          result = sbom_scan.summarize(data)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(result.markdown)
+          print("1" if result.has_blocking else "0")
+          PY
+          )
+          if [ "$blocking" = "1" ]; then
+            if [ "$ENFORCEMENT" = "active" ]; then
+              echo "::error::Critical/High vulnerabilities present — failing active release."
+              exit 1
+            fi
+            echo "::warning::[evaluate-mode] Critical/High vulnerabilities present — would fail in active mode."
+          fi
+
+      # Keyless, OIDC-bound, transparency-logged attestations over the IMAGE
+      # DIGEST (not a file). An image built by anything other than this workflow
+      # fails the agent's verification.
+      - name: Attest build provenance
+        if: steps.gate.outputs.applicable == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE_REF }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          push-to-registry: true
+
+      - name: Attest SBOM
+        if: steps.gate.outputs.applicable == 'true'
+        uses: actions/attest-sbom@v2
+        with:
+          subject-name: ${{ env.IMAGE_REF }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          sbom-path: ${{ env.SBOM_FILE }}
+          push-to-registry: true
+
+      # Validation report (regulated-mandatory). No report -> no Release.
+      - name: Generate the validation report
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          cmd=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --run validation-docs)
+          echo "+ $cmd"
+          bash -c "$cmd"
+          report=""
+          while IFS= read -r glob; do
+            for f in $glob; do
+              if [ -f "$f" ] && [ -s "$f" ]; then report="$f"; break 2; fi
+            done
+          done < <(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --outputs validation-docs)
+          if [ -z "$report" ]; then
+            echo "::error::The validation-docs target produced no non-empty report. No validation evidence, no Release."
+            exit 1
+          fi
+          echo "VALIDATION_REPORT=$report" >> "$GITHUB_ENV"
+          echo "Validation report: $report"
+
+      - name: Collect assets and compute SHA256SUMS
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          mkdir -p "$STATE_DIR/assets"
+          cp "$VALIDATION_REPORT" "$STATE_DIR/assets/"
+          cp "$SBOM_FILE" "$STATE_DIR/assets/"
+          ( cd "$STATE_DIR/assets" && sha256sum ./* > SHA256SUMS )
+          echo "Assets:"
+          ls -1 "$STATE_DIR/assets"
+
+      # Milestone-scoped notes + CtQ traceability matrix. Issue bodies are
+      # fetched to a file and read as data — never interpolated into source.
+      - name: Generate release notes
+        if: steps.gate.outputs.applicable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MILESTONE: ${{ inputs.milestone }}
+        run: |
+          milestone="${MILESTONE:-$TAG}"
+          # Map milestone title -> number, then list its closed issues.
+          number=$(gh api "repos/$REPO/milestones?state=all" \
+            --jq ".[] | select(.title == \"$milestone\") | .number" | head -n1)
+          if [ -n "$number" ]; then
+            gh api "repos/$REPO/issues?milestone=$number&state=closed&per_page=100" --paginate \
+              > "$STATE_DIR/issues.json"
+          else
+            echo "::warning::No milestone titled '$milestone' found — notes will have an empty changelog."
+            echo "[]" > "$STATE_DIR/issues.json"
+          fi
+          prev_tag=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo "")
+          MILESTONE="$milestone" PREV_TAG="$prev_tag" \
+          PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
+          import json, os, yaml
+          from release import notes
+          from release.notes import MilestoneItem
+
+          state = os.environ["STATE_DIR"]
+          with open(os.path.join(state, "issues.json")) as f:
+              raw = json.load(f)
+          items = []
+          for it in raw:
+              if "pull_request" in it:  # the issues API returns PRs too
+                  continue
+              items.append(MilestoneItem(
+                  number=it["number"],
+                  title=it.get("title") or "",
+                  body=it.get("body") or "",
+                  labels=[l["name"] for l in it.get("labels") or []],
+              ))
+
+          class _Evidence:
+              def milestone_items(self, repo, milestone):
+                  return items
+
+          compliance = yaml.safe_load(open(os.environ["COMPLIANCE_PATH"])) or {}
+          md = notes.build_notes(
+              repo=os.environ["REPO"],
+              milestone=os.environ["MILESTONE"],
+              tag=os.environ["TAG"],
+              prev_tag=os.environ.get("PREV_TAG") or "",
+              compliance=compliance,
+              evidence=_Evidence(),
+          )
+          image = os.environ.get("IMAGE", "")
+          header = f"> **Released image:** `{image}`\n\n" if image else ""
+          with open(os.path.join(state, "notes.md"), "w") as f:
+              f.write(header + md)
+          PY
+          echo "NOTES_FILE=$STATE_DIR/notes.md" >> "$GITHUB_ENV"
+
+      # When gated by an Environment, this job only runs once a required reviewer
+      # has approved — so we can record who authorised the release. This is the
+      # technical-evidence half; the formal e-signature of record is captured per
+      # docs/release-authorisation.md.
+      - name: Fill the release authorisation block
+        if: steps.gate.outputs.applicable == 'true' && inputs.environment != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID/approvals" \
+            > "$STATE_DIR/approvals.json" 2>/dev/null || echo "[]" > "$STATE_DIR/approvals.json"
+          NOW_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
+          import json, os
+          state = os.environ["STATE_DIR"]
+          with open(os.path.join(state, "approvals.json")) as f:
+              data = json.load(f)
+          approvers = sorted({
+              (e.get("user") or {}).get("login")
+              for e in (data if isinstance(data, list) else [])
+              if e.get("state") == "approved" and (e.get("user") or {}).get("login")
+          })
+          approver = ", ".join(approvers) or "_unrecorded_"
+          marker = "## Release authorisation"
+          notes_path = os.path.join(state, "notes.md")
+          md = open(notes_path).read()
+          head = md.split(marker)[0]
+          block = (
+              f"{marker}\n\n"
+              f"- **Approved by:** {approver}\n"
+              f"- **Approved at (UTC):** {os.environ.get('NOW_UTC', '')}\n"
+              f"- **Released image digest:** `{os.environ.get('IMAGE_DIGEST', '')}`\n"
+              f"- **Environment:** {os.environ.get('ENVIRONMENT', '')}\n\n"
+              "The formal electronic signature of record (re-authentication + "
+              "explicit meaning + signer role) is captured in the application "
+              "signature flow or the CTU QMS/eTMF, referencing the digest above — "
+              "see docs/release-authorisation.md.\n"
+          )
+          open(notes_path, "w").write(head + block)
+          PY
+
+      - name: Create the Release
+        if: steps.gate.outputs.applicable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=( "$TAG" --target "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" )
+          # Draft in evaluate; published in active.
+          if [ "$ENFORCEMENT" != "active" ]; then
+            args+=( --draft )
+          fi
+          # Prerelease (no --latest) for -rc/-beta tags.
+          case "$TAG" in
+            *-rc*|*-beta*) args+=( --prerelease ) ;;
+            *)            [ "$ENFORCEMENT" = "active" ] && args+=( --latest ) ;;
+          esac
+          gh release create "${args[@]}" \
+            "$STATE_DIR/assets/$(basename "$VALIDATION_REPORT")" \
+            "$STATE_DIR/assets/$(basename "$SBOM_FILE")" \
+            "$STATE_DIR/assets/SHA256SUMS"
+
+      - name: Release manifest summary
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          {
+            echo "## Release ${TAG}"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Image | \`${IMAGE}\` |"
+            echo "| Enforcement | \`${ENFORCEMENT}\` (draft if evaluate) |"
+            echo "| Validation report | \`$(basename "$VALIDATION_REPORT")\` |"
+            echo "| SBOM | \`$(basename "$SBOM_FILE")\` |"
+            echo "| Checksums | \`SHA256SUMS\` |"
+            echo "| Provenance + SBOM attestations | over \`${IMAGE_DIGEST}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Not a regulated repo
+        if: steps.gate.outputs.applicable != 'true'
+        run: echo "Release workflow not applicable to this repo (no .compliance.yml or regulatory_tier=none)."

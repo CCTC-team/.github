@@ -61,6 +61,10 @@ The engine is a **poll → diff → dispatch** loop, runnable offline against fi
 - **Lifecycle status and field names are exact strings** shared across the state machine, preconditions, board, and tests (e.g. `User acceptance`, `Acceptance Approver`). A rename is cross-cutting — grep the package, the config, and `README.md`. Note the historical `PQ review`→`User acceptance` / `PQ Approver`→`Acceptance Approver` rename when reading older docs/plans.
 - **`README.md` documents these controls for humans and goes stale silently.** When you change a check's trigger or a control's behaviour, update the matching `README.md` bullet (and any relevant `docs/*-rationale.md`) in the same change.
 
+## Keep the wiki in sync
+
+This repo has an accompanying GitHub wiki checked out alongside it at `~/repos/.github.wiki` (pages such as `Compliance-Framework.md`, `Branch-Protection-Rulesets.md`, `GxP-Traceability-Gate.md`). **Whenever anything of substance changes in this repo** — a control's behaviour, the compliance schema, rulesets, workflows, inheritance rules, labels, or the enforcement engine — check the corresponding wiki page(s) and update them so the two stay consistent. **The repo is the authoritative source of truth**; when the wiki and the repo disagree, fix the wiki to match the repo (not the other way round). Like `README.md`, the wiki goes stale silently, so reconcile it in the same change rather than leaving it for later.
+
 ## Implementation plans
 
 `AIPlans/` holds phased implementation plans: top-level = not started, `InProgress/`, `Complete/`. Plans are executed phase-by-phase (often TDD: write/flip the test, watch it fail, then implement) with checkboxes updated as work lands. When implementing from a plan, read it in full first — its design decisions are the spec.

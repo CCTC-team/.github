@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCTC-team/.github/blob/main/release-targets.schema.json",
+  "title": "CCTC Release Targets Manifest",
+  "description": "Per-repo binding between the canonical, tool-agnostic build-target contract (documented in claude-org guides/build-and-release.md) and this repo's actual build commands. The org release automation reads this manifest and never hardcodes a repo's paths or tools. Which targets are mandatory depends on the repo's regulatory_tier and is checked separately (scripts/release/contract.py), not by this schema.",
+  "type": "object",
+  "required": ["targets"],
+  "additionalProperties": false,
+  "properties": {
+    "build_tool": {
+      "description": "Informational: the build tool this manifest drives (e.g. FAKE, MSBuild, Cake, npm, Make). Not used for binding — the commands in `targets` are authoritative.",
+      "type": "string",
+      "minLength": 1
+    },
+    "version_pin_env": {
+      "description": "Name of the environment variable the build honours to pin the version it stamps (so CI can build the exact version a tag names rather than a self-computed one). The `version` target must respect it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "image": {
+      "description": "For hosted apps that package a container image: where `publish:registry` pushes it and which env var the build stamps the pushed digest into. Omit for repos whose distributable is a package (nupkg/zip) rather than an image.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registry", "repository", "digest_env"],
+      "properties": {
+        "registry": {
+          "description": "Container registry host, e.g. ghcr.io.",
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "description": "Image repository path within the registry, e.g. cctc-team/trialview.",
+          "type": "string",
+          "minLength": 1
+        },
+        "digest_env": {
+          "description": "Environment variable the `publish:registry` target writes the pushed image's sha256 digest into, so the workflow can attest and reference that exact digest.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "targets": {
+      "description": "Map from canonical target name to how this repo invokes it. Keys are restricted to the canonical target vocabulary; presence of the mandatory ones for this repo's regulatory_tier is enforced by scripts/release/contract.py.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "enum": [
+          "clean",
+          "restore",
+          "build",
+          "test",
+          "docs",
+          "version",
+          "package",
+          "publish:registry",
+          "deploy:staging",
+          "verify:staging",
+          "functional-tests",
+          "tag",
+          "deploy:production",
+          "verify:production",
+          "validation-docs",
+          "sbom"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run"],
+        "properties": {
+          "run": {
+            "description": "The command this repo runs to satisfy the target. The org workflow executes it verbatim; nothing about it is interpreted by the workflow.",
+            "type": "string",
+            "minLength": 1
+          },
+          "outputs": {
+            "description": "Optional glob(s) for the files this target produces, so the workflow can collect them (e.g. the validation report or SBOM path).",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

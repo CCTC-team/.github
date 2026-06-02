@@ -19,6 +19,9 @@ for f in "$SCHEMA_FILE" \
          "$TEMPLATES_DIR/caller-workflow.yml" \
          "$TEMPLATES_DIR/gxp-traceability-caller.yml" \
          "$TEMPLATES_DIR/project-card-promote-caller.yml" \
+         "$TEMPLATES_DIR/release.yml" \
+         "$TEMPLATES_DIR/release-caller.yml" \
+         "$TEMPLATES_DIR/release-targets.yml.example" \
          "$TEMPLATES_DIR/README-banner.md" \
          "$TEMPLATES_DIR/CONTRIBUTING-regulated.md"; do
   [ -f "$f" ] || { echo "::error::Canonical file missing in .github checkout: $f"; exit 1; }
@@ -141,6 +144,29 @@ check_and_fix() {
   # workflow's own guard step prints a step-summary line on every PR
   # run when the variable is unset, so the signal lands in the right
   # place (the PR, not the drift PR) anyway.
+
+  # 8. Release-notes auto-categorisation config (stubbed if missing, NOT
+  # overwritten — repos may tune their changelog categories locally).
+  if [ ! -f .github/release.yml ]; then
+    ensure_file_matches "$TEMPLATES_DIR/release.yml" ".github/release.yml" || true
+    changed=1; reasons+=("release-notes config missing (stubbed)")
+  fi
+
+  # 9. Release caller workflow (stubbed if missing, NOT overwritten — repos
+  # may have flipped enforcement to active or set the environment locally).
+  if [ ! -f .github/workflows/release.yml ]; then
+    ensure_file_matches "$TEMPLATES_DIR/release-caller.yml" ".github/workflows/release.yml" || true
+    changed=1; reasons+=("release caller workflow missing (stubbed)")
+  fi
+
+  # 10. Build-target manifest (stubbed from the worked example if missing, NOT
+  # overwritten — it is TODO-flagged for the repo owner to fill in their own
+  # build commands and image refs; the release workflow no-ops usefully until
+  # then, and the contract check flags any missing mandatory target).
+  if [ ! -f .github/release-targets.yml ]; then
+    ensure_file_matches "$TEMPLATES_DIR/release-targets.yml.example" ".github/release-targets.yml" || true
+    changed=1; reasons+=("release-targets manifest missing (stubbed, TODO)")
+  fi
 
   if [ "$changed" -eq 0 ]; then
     echo "  ✓ no drift"

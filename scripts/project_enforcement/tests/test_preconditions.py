@@ -21,7 +21,7 @@ from project_enforcement.checks.preconditions import (
     risk_linked,
     vv_tests_pass,
 )
-from project_enforcement.evidence import IssueMeta, LinkedPR, StubEvidence
+from project_enforcement.evidence import IssueMeta, LinkedPR, ReleaseMeta, StubEvidence
 from project_enforcement.handler import CheckContext
 
 
@@ -30,11 +30,11 @@ NUMBER = 42
 PROJECT = {"owner": "CCTC-team", "number": 31}
 
 
-def _ctx(actions=None):
+def _ctx(actions=None, config=None):
     return CheckContext(
         project_cfg=PROJECT,
         fields={},
-        config={},
+        config=config or {},
         mode="evaluate",
         snapshot={},
         actions=actions or RecordingActions(known_users={"alice", "bob", "carol", "dave"}),
@@ -404,17 +404,28 @@ class TestQaApproved:
 # ============================== Released ==============================
 
 class TestReleased:
-    def _evidence(self, *, merged=True, base="main", merge_sha="abc123", default="main", released=True):
+    def _evidence(
+        self, *, merged=True, base="main", merge_sha="abc123", default="main",
+        release="with-asset",
+    ):
         ev = StubEvidence()
         ev.branches[REPO] = default
         ev.prs[(REPO, NUMBER)] = [
             LinkedPR(repo=REPO, number=99, head_sha="head", base_ref=base, state="MERGED" if merged else "OPEN", merged=merged, merge_commit_sha=merge_sha),
         ]
-        if released:
-            ev.releases.add((REPO, merge_sha))
+        # release: "with-asset" | "no-asset" | "attested" | None (no published release)
+        if release == "with-asset":
+            ev.published_releases[(REPO, merge_sha)] = ReleaseMeta(
+                tag="v1.0.0", sha=merge_sha, has_validation_asset=True)
+        elif release == "no-asset":
+            ev.published_releases[(REPO, merge_sha)] = ReleaseMeta(
+                tag="v1.0.0", sha=merge_sha, has_validation_asset=False)
+        elif release == "attested":
+            ev.published_releases[(REPO, merge_sha)] = ReleaseMeta(
+                tag="v1.0.0", sha=merge_sha, has_validation_asset=True, has_provenance=True)
         return ev
 
-    def test_passes(self):
+    def test_passes_with_published_release_carrying_validation_report(self):
         assert released.check(_item(), _ctx(), self._evidence()) == []
 
     def test_fails_when_not_merged(self):
@@ -425,9 +436,30 @@ class TestReleased:
         reasons = released.check(_item(), _ctx(), self._evidence(base="develop"))
         assert any("default branch" in r for r in reasons)
 
-    def test_fails_when_no_release_tag(self):
-        reasons = released.check(_item(), _ctx(), self._evidence(released=False))
-        assert any("No release or tag" in r for r in reasons)
+    def test_fails_when_only_a_bare_tag_or_draft(self):
+        # No published release for the SHA — a bare tag must not satisfy Released.
+        reasons = released.check(_item(), _ctx(), self._evidence(release=None))
+        assert any("No published Release" in r for r in reasons)
+
+    def test_fails_when_release_has_no_validation_report(self):
+        reasons = released.check(_item(), _ctx(), self._evidence(release="no-asset"))
+        assert any("no\n" not in r and "validation report" in r for r in reasons)
+
+    def test_attestation_flag_off_passes_without_provenance(self):
+        # Default config: a release with the validation report but no recorded
+        # provenance still passes (the flag is off during rollout).
+        assert released.check(_item(), _ctx(), self._evidence(release="with-asset")) == []
+
+    def test_attestation_flag_on_requires_provenance(self):
+        cfg = {"require_release_attestation": True}
+        reasons = released.check(
+            _item(), _ctx(config=cfg), self._evidence(release="with-asset"))
+        assert any("provenance attestation" in r for r in reasons)
+
+    def test_attestation_flag_on_passes_with_provenance(self):
+        cfg = {"require_release_attestation": True}
+        assert released.check(
+            _item(), _ctx(config=cfg), self._evidence(release="attested")) == []
 
 
 def test_preconditions_registry_complete():

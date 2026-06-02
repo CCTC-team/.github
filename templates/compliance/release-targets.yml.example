@@ -1,0 +1,98 @@
+# yaml-language-server: $schema=./.github/release-targets.schema.json
+#
+# Release targets manifest for this repository.
+# Canonical schema:   CCTC-team/.github/release-targets.schema.json
+# Target contract:     claude-org/rules/guides/build-and-release.md
+#
+# This file binds the canonical, tool-agnostic build targets to THIS repo's
+# actual build commands. The org release workflow reads it and runs the
+# commands verbatim — it hardcodes none of your paths or tools.
+#
+# ⚠️ EVERY VALUE BELOW IS A WORKED EXAMPLE for a hosted Blazor + API app
+#    (TrialView → a GHCR container image). It is NOT a default. Replace each
+#    `run:` with the command your own build uses and delete targets that do
+#    not apply. Auto-stubbed by compliance-drift; review every TODO first.
+
+# Informational only — the commands below are what actually bind.
+build_tool: FAKE   # TODO: your build tool (FAKE / MSBuild / Cake / npm / Make)
+
+# The env var your `version` and `package` targets honour to build the exact
+# version a tag names, instead of self-computing one.
+version_pin_env: TRIALVIEW_BUILD_VERSION   # TODO: your build's version-pin env var
+
+# Hosted apps only: where `publish:registry` pushes the image, and the env var
+# your build stamps the pushed sha256 digest into. Delete this block entirely
+# if your distributable is a package (nupkg/zip) rather than a container image.
+image:
+  registry: ghcr.io                         # TODO: your registry host
+  repository: cctc-team/trialview           # TODO: your image repository path
+  digest_env: TRIALVIEW_IMAGE_DIGEST        # TODO: env var your push writes the digest into
+
+# Each target maps a canonical name to the command this repo runs and,
+# optionally, globs for the files it produces (so the workflow can collect
+# them). Only the canonical target names are allowed as keys.
+targets:
+  clean:
+    run: dotnet run --project ./build/build.fsproj -- --target Clean   # TODO
+
+  restore:
+    run: dotnet restore   # TODO
+
+  build:
+    run: dotnet run --project ./build/build.fsproj -- --target Build   # TODO: must compile in Release
+
+  test:
+    run: dotnet run --project ./build/build.fsproj -- --target Test   # TODO
+    outputs:
+      - "**/TestResults/*.trx"   # TODO: where your test results land
+
+  docs:
+    run: dotnet run --project ./build/build.fsproj -- --target Docs   # TODO
+
+  version:
+    run: dotnet run --project ./build/build.fsproj -- --target Version   # TODO: must honour version_pin_env
+
+  package:
+    # Build the OCI image in CI (NOT on the server). The image is what
+    # provenance attests.
+    run: dotnet run --project ./build/build.fsproj -- --target Package   # TODO
+
+  publish:registry:
+    # Push to GHCR by digest. IMPORTANT: this target must export the pushed
+    # sha256 digest to $GITHUB_ENV under image.digest_env, e.g.:
+    #   echo "TRIALVIEW_IMAGE_DIGEST=sha256:$(...)" >> "$GITHUB_ENV"
+    # The release workflow reads it back to attest and reference the exact image.
+    run: dotnet run --project ./build/build.fsproj -- --target Publish   # TODO
+
+  deploy:staging:
+    run: dotnet run --project ./build/build.fsproj -- --target "Deploy to Staging"   # TODO (agent-run)
+
+  verify:staging:
+    run: dotnet run --project ./build/build.fsproj -- --target "Verify staging boot"   # TODO (agent-run)
+
+  functional-tests:
+    run: dotnet run --project ./build/build.fsproj -- --target "Functional tests"   # TODO
+
+  tag:
+    # MUST create a SIGNED annotated tag (git tag -s), not -a or bare git tag.
+    run: dotnet run --project ./build/build.fsproj -- --target "Tag version in git"   # TODO: ensure -s
+
+  deploy:production:
+    run: dotnet run --project ./build/build.fsproj -- --target "Deploy to Production"   # TODO (agent-run)
+
+  verify:production:
+    run: dotnet run --project ./build/build.fsproj -- --target "Verify production boot"   # TODO (agent-run)
+
+  # --- Regulated-only targets (required for gcp-critical) ---
+
+  validation-docs:
+    # Generate the validation summary (CtQ → URS → V&V → acceptance → QA).
+    run: dotnet run --project ./build/build.fsproj -- --target "Build validation docs"   # TODO
+    outputs:
+      - "docs/validation/validation-report.md"   # TODO: your declared report path
+
+  sbom:
+    # Generate a CycloneDX / SPDX SBOM.
+    run: dotnet CycloneDX ./TrialView.sln -o ./artifacts   # TODO
+    outputs:
+      - "artifacts/bom.json"   # TODO: your declared SBOM path

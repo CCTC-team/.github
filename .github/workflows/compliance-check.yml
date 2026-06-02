@@ -35,6 +35,14 @@ on:
         description: "Comma-separated list of schema_version values this validator accepts."
         type: string
         default: "1"
+      contract_enforcement:
+        description: "active | evaluate. Controls the build-target contract check: evaluate warns, active fails. (Schema validation always hard-fails.)"
+        type: string
+        default: "evaluate"
+      tooling_ref:
+        description: "Ref of CCTC-team/.github to load the contract checker (scripts/release) from."
+        type: string
+        default: "main"
 
 jobs:
   validate:
@@ -43,6 +51,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+
+      - name: Checkout contract checker tooling
+        uses: actions/checkout@v6
+        with:
+          repository: CCTC-team/.github
+          ref: ${{ inputs.tooling_ref }}
+          path: _release-tooling
 
       - name: Ensure required files are present
         run: |
@@ -113,6 +128,58 @@ jobs:
             exit 1
           fi
           echo "Compliance metadata reviewed $reviewed ($age_days days ago, cadence $cadence months)."
+
+      # Build-target contract: a regulated repo must declare every mandatory
+      # target (tag, validation-docs, sbom, …) in its release-targets manifest.
+      # evaluate -> warn; active -> fail. Schema validation above always
+      # hard-fails; this check graduates separately like the other controls.
+      - name: Check the build-target contract
+        env:
+          COMPLIANCE_PATH: ${{ inputs.compliance_path }}
+          CONTRACT_ENFORCEMENT: ${{ inputs.contract_enforcement }}
+        run: |
+          tier=$(/tmp/cjs/bin/python <<'PY'
+          import os, yaml
+          d = yaml.safe_load(open(os.environ["COMPLIANCE_PATH"])) or {}
+          print(d.get("regulatory_tier") or "")
+          PY
+          )
+          if [ "$tier" = "none" ] || [ -z "$tier" ]; then
+            echo "regulatory_tier=$tier — build-target contract not applicable."
+            exit 0
+          fi
+          manifest=$(/tmp/cjs/bin/python <<'PY'
+          import os, yaml
+          d = yaml.safe_load(open(os.environ["COMPLIANCE_PATH"])) or {}
+          print(d.get("release_targets_path") or ".github/release-targets.yml")
+          PY
+          )
+          emit() {
+            if [ "$CONTRACT_ENFORCEMENT" = "active" ]; then echo "::error::$*"; else echo "::warning::[evaluate-mode] $*"; fi
+          }
+          status=0
+          if [ ! -f "$manifest" ]; then
+            emit "No release-targets manifest at $manifest. A regulated repo must declare its build targets (drift stubs one from the worked example)."
+            status=1
+          else
+            problems=$(TIER="$tier" MANIFEST="$manifest" PYTHONPATH="$GITHUB_WORKSPACE/_release-tooling/scripts" /tmp/cjs/bin/python <<'PY'
+          import os, yaml
+          from release import contract
+          m = yaml.safe_load(open(os.environ["MANIFEST"])) or {}
+          for p in contract.check_manifest(m, os.environ["TIER"]):
+              print(p)
+          PY
+            )
+            if [ -n "$problems" ]; then
+              while IFS= read -r p; do emit "release-targets contract: $p"; done <<< "$problems"
+              status=1
+            else
+              echo "Build-target contract satisfied for tier $tier."
+            fi
+          fi
+          if [ "$CONTRACT_ENFORCEMENT" = "active" ] && [ "$status" != "0" ]; then
+            exit 1
+          fi
 
       - name: Surface compliance summary
         if: always()

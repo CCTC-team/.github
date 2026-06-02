@@ -23,10 +23,14 @@ For an overview of CCTC and the software we publish, see the
 | `scripts/sync-labels.sh` | Applies `labels.json` to one or all org repos via `gh` |
 | `.github/workflows/sync-labels.yml` | Nightly + on-change run of the label sync |
 | `compliance.schema.json` | JSON Schema for `.compliance.yml` in regulated repos |
-| `templates/compliance/` | `.compliance.yml.example`, `CONTRIBUTING-regulated.md`, README-banner, caller workflows (`caller-workflow.yml`, `gxp-traceability-caller.yml`, `project-card-promote-caller.yml`) — pushed by drift |
+| `release-targets.schema.json` | JSON Schema for `.github/release-targets.yml` — the per-repo build-target manifest the release workflow binds to (see [Release process](#release-process)) |
+| `templates/compliance/` | `.compliance.yml.example`, `CONTRIBUTING-regulated.md`, README-banner, release-notes config (`release.yml`), build-target manifest (`release-targets.yml.example`), caller workflows (`caller-workflow.yml`, `gxp-traceability-caller.yml`, `project-card-promote-caller.yml`, `release-caller.yml`) — pushed by drift |
+| `scripts/release/` | Python package: the build-target contract checker (`contract.py`) and the milestone-scoped release-notes / SBOM-scan tooling the release workflow uses |
+| `docs/release-process.md` | The milestone/Release/pull-agent model and the regulated Release artifact set (inspector-facing) |
 | `.github/workflows/compliance-check.yml` | Reusable workflow regulated repos opt into |
 | `.github/workflows/compliance-drift.yml` | Nightly drift correction across regulated repos |
 | `.github/workflows/gxp-traceability.yml` | Reusable PR gate enforcing Risk ID + Requirement ID traceability on changes to validated paths |
+| `.github/workflows/release.yml` | Reusable release workflow: builds + signs the container image, pushes to GHCR by digest, attests provenance + SBOM, and cuts a Release with the validation evidence (see [Release process](#release-process)) |
 | `.github/workflows/project-enforcement.yml` | 5-minute poller that diffs the regulated lifecycle board(s) and dispatches each card change to the checks under `scripts/project_enforcement/` |
 | `.github/workflows/project-card-promote.yml` | Reusable PR-driven forward-only promoter (Code review / V&V tests pass). Callers live in regulated repos. |
 | `.github/workflows/project-audit.yml` | Nightly sweep that maintains a rolling `Project enforcement drift` issue per board |
@@ -466,6 +470,23 @@ role-based bypass. Every bypass event is captured in the org audit
 log; an incident record should accompany each one. Baseline rules
 carry over.
 
+#### Ruleset C — `cctc-tag-immutability`
+
+Defined in [`rulesets/cctc-tag-immutability.json`](rulesets/cctc-tag-immutability.json).
+A separate `target: tag` ruleset (not part of the branch rulesets above),
+scoped to all regulated repos (`gcp-critical`, `gcp-supporting`,
+`data-protection`) and matching `refs/tags/v*`.
+
+| Rule | Setting | Driver |
+| --- | --- | --- |
+| Block tag deletion | `deletion` | A published version tag is a release record — it must not vanish |
+| Block tag force-update | `non_fast_forward` | A `v*` tag can never be moved or re-pointed, matching the immutability of the released image digest |
+
+**Zero bypass actors** — a released version tag is immutable, full stop.
+This is the inspection-resilience payoff of the release pipeline: the tag,
+the GitHub Release, and the GHCR image digest are all fixed and mutually
+consistent.
+
 #### `none`
 
 Baseline only. Direct push to `main` still allowed. No regulatory
@@ -537,7 +558,18 @@ gh api -X POST /orgs/CCTC-team/rulesets \
 
 gh api -X POST /orgs/CCTC-team/rulesets \
   --input rulesets/cctc-gcp-critical.json
+
+gh api -X POST /orgs/CCTC-team/rulesets \
+  --input rulesets/cctc-tag-immutability.json
 ```
+
+> **Tag immutability depends on `active` enforcement.** All three rulesets
+> ship with `"enforcement": "evaluate"` (log-only). The `v*` tag-immutability
+> and `release/*` guarantees do **not** actually prevent a tag being moved or
+> deleted until `cctc-tag-immutability` (and the branch rulesets) are flipped
+> to `"enforcement": "active"`. Flip them once you have watched a clean
+> evaluate cycle — until then the immutability is documented intent, not an
+> enforced control.
 
 **Evaluate mode.** GitHub Rulesets support a log-only mode that
 records violations without blocking pushes. Set `"enforcement":
@@ -585,8 +617,10 @@ suite of checks.
   approver usernames that resolve, segregation of duties across
   author / Acceptance / QA, and (for QA) a `Deviation Ref` when any historical
   gxp-traceability run failed; `Released` requires the linked PR
-  merged to the default branch and a release tag referencing the
-  merge SHA.
+  merged to the default branch and a **published** Release — carrying the
+  validation report — whose tag resolves to the merge SHA (a bare tag or a
+  draft release does not satisfy it; an optional config flag additionally
+  requires a verifiable provenance attestation).
 - **Field-drift.** Changes to `Risk ID` / `Requirement ID` that no
   longer match the issue body, signoff dates in the future or before
   the issue was opened, Acceptance-after-QA, approver changes on cards at or
@@ -642,7 +676,7 @@ inline so the audit trail is here, not in chat:
 | `preconditions: V&V tests pass` | _pending_ | |
 | `preconditions: User acceptance` | _pending_ | |
 | `preconditions: QA approved` | _pending_ | |
-| `preconditions: Released` | _pending_ | Depends on Phase 5 PR promoter being green |
+| `preconditions: Released` | _pending_ | Hardened gate: needs a published Release carrying the validation report (see [Release pipeline rollout log](#release-pipeline-rollout-log)). Stays in evaluate until the release workflow has cut one green published Release **and** the agent has done one verified staging pull-deploy |
 | `drift_id_mirror` | _pending_ | |
 | `drift_date_sanity` | _pending_ | |
 | `drift_approver_identity` | _pending_ | |
@@ -674,6 +708,54 @@ The poller, promoter, and audit each need a token with `read:project`
 options (expand the Compliance Drift App or stand up a separate
 `CCTC Project Enforcement` App) live in
 [`docs/project-enforcement-app-setup.md`](docs/project-enforcement-app-setup.md).
+
+## Release process
+
+Where the project board governs a *feature's* V&V lifecycle, the release
+pipeline governs how a *validated build* reaches production — and the evidence
+it leaves behind. Three orthogonal layers:
+
+- **Project board status** — where a feature is in its lifecycle (`Triage …
+  Released`).
+- **Milestone (`vX.Y.Z`)** — which requirements a release covers; one milestone
+  = one release.
+- **Release** — what was published, on a signed `vX.Y.Z` tag, with its evidence.
+
+The deploy model is **pull, never push**: production accepts no inbound
+connection. CI builds and signs a container **image**, pushes it to GHCR by
+immutable digest, and cuts a Release gated by a `production` Environment
+approval. An agent **on the server** verifies the image's keyless attestation
+against the release workflow's identity, pulls it **by digest**, and runs it.
+The build↔workflow binding is a per-repo manifest (`.github/release-targets.yml`,
+schema [`release-targets.schema.json`](release-targets.schema.json)) against the
+tool-agnostic build-target contract in claude-org
+`rules/guides/build-and-release.md`.
+
+The full model — the artifact set on every regulated Release and the ICH E6(R3)
+/ ALCOA+ clause each answers — is in
+[`docs/release-process.md`](docs/release-process.md); the production
+authorisation gate and the electronic-signature residual gap are in
+[`docs/release-authorisation.md`](docs/release-authorisation.md).
+
+### Release pipeline rollout log
+
+The release controls roll out evaluate → active like the board checks, but flip
+by a different mechanism: the caller workflow's `enforcement:` input
+(`evaluate` cuts a **draft** Release and the agent ignores drafts; `active`
+publishes a gated Release, enforces the vulnerability gate and the `production`
+approval, and the agent deploys the verified digest), and — for the agent —
+enabling the on-server timer. Record each flip here.
+
+| Control | Active | Notes |
+| --- | --- | --- |
+| release workflow (publish) | _pending_ | Flip the caller `enforcement: evaluate → active` after one clean draft-Release cycle |
+| release workflow (vuln gate) | _pending_ | Fails on critical/high in `active`; warns in `evaluate` |
+| pull-agent (staging) | _pending_ | Enable after one verified pull-deploy on staging |
+| pull-agent (production) | _pending_ | Enable after staging is proven |
+
+The hardened `Released` board precondition (a card may reach `Released` only
+behind a *published* Release carrying its validation evidence) is tracked in the
+[board rollout log](#active-mode-rollout-log).
 
 ## Deliberately not done
 
