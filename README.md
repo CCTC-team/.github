@@ -194,8 +194,8 @@ are missing the next time it runs, but you can also commit them by hand:
    no-ops via its guard step — drift never sets the variable for you
    because choosing the board is a deliberate per-repo decision.
 
-Starter copies of all six live in `templates/compliance/` and at
-`compliance.schema.json`. Drift stubs the GxP caller if absent but
+Starter copies of items #2–7 live in `templates/compliance/`; the
+schema (#1) is `compliance.schema.json` itself. Drift stubs the GxP caller if absent but
 never overwrites it — once stubbed, the repo owns its
 `enforcement` value.
 
@@ -508,10 +508,13 @@ driver.
   ALCOA+ control further up the table, not for the four-eyes rule.)
   Any developer on the regulated estate who is not the PR author
   satisfies the regulation; the gap is operational, not a staffing
-  shortage. With zero bypass actors on this ruleset and
-  code-owner review enabled, an empty CODEOWNERS file means no PR can
-  merge — so each `gcp-critical` repo needs CODEOWNERS populated to
-  a team or reviewer set that excludes the typical PR author. Per-
+  shortage. With zero bypass actors on this ruleset, a PR cannot
+  merge until a reviewer who is not its author approves it (the
+  require-PR + `require_last_push_approval` rules). Code-owner review
+  is a no-op while CODEOWNERS is empty, so each `gcp-critical` repo
+  needs CODEOWNERS populated to a team or reviewer set that excludes
+  the typical PR author — both to route review to the responsible
+  party and to guarantee an eligible second reviewer exists. Per-
   repo task, not org-wide.
 
 **Out of scope for either ruleset:**

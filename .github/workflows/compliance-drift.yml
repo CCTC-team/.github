@@ -10,6 +10,8 @@ name: Compliance scaffold drift check
 #   - .compliance.yml at repo root (stubbed with today's date if missing)
 #   - README.md carrying the <!-- compliance:banner --> marker
 #   - CONTRIBUTING-regulated.md identical to the canonical copy
+#   - .github/workflows/project-card-promote.yml caller workflow
+#     (stubbed if missing; never overwritten)
 #
 # Drift is corrected by opening a PR against the affected repo. The PR
 # history IS the audit-trail evidence — do not squash-merge without keeping
