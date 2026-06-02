@@ -69,7 +69,7 @@ def regulated_item(number, title, **kw):
     )
 
 
-def build(items, comp=None):
+def build(items, comp=None, images=None):
     ev = StubNotesEvidence(items={("CCTC-team/trialview", "v1.4.0"): items})
     return notes.build_notes(
         repo="CCTC-team/trialview",
@@ -78,7 +78,38 @@ def build(items, comp=None):
         prev_tag="v1.3.0",
         compliance=comp if comp is not None else compliance(),
         evidence=ev,
+        images=images,
     )
+
+
+TWO_IMAGES = {
+    "trialview": "ghcr.io/cctc-team/trialview@sha256:" + "a" * 64,
+    "trialview-api": "ghcr.io/cctc-team/trialview-api@sha256:" + "b" * 64,
+}
+ONE_IMAGE = {"gtg-web": "ghcr.io/cctc-team/gtg-web@sha256:" + "c" * 64}
+
+
+class TestReleasedImages:
+    def test_two_image_table_lists_every_component(self):
+        md = build([regulated_item(24, "Feature")], images=TWO_IMAGES)
+        section = md.split("## Released images", 1)[1].split("##", 1)[0]
+        assert "trialview" in section and "trialview-api" in section
+        assert "sha256:" + "a" * 64 in section
+        assert "sha256:" + "b" * 64 in section
+
+    def test_single_image_table(self):
+        md = build([regulated_item(24, "Feature")], images=ONE_IMAGE)
+        section = md.split("## Released images", 1)[1].split("##", 1)[0]
+        assert "gtg-web" in section
+        assert "sha256:" + "c" * 64 in section
+
+    def test_components_sorted_by_name(self):
+        md = build([regulated_item(24, "Feature")], images=TWO_IMAGES)
+        assert md.index("| trialview ") < md.index("| trialview-api ")
+
+    def test_no_images_arg_omits_the_section(self):
+        md = build([regulated_item(24, "Feature")])
+        assert "## Released images" not in md
 
 
 class TestChangelog:

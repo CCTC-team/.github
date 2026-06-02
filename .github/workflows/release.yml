@@ -1,14 +1,21 @@
 name: Release (reusable)
 
-# Reusable release workflow for regulated repos. Builds and signs a container
-# image in CI, pushes it to GHCR by immutable digest, attests provenance + SBOM
-# over that image, and cuts a GitHub Release carrying the validation evidence.
-# The on-server pull-agent verifies the attestation and deploys the digest;
-# nothing here ever pushes into a server.
+# Reusable release workflow for regulated repos. Builds and signs the repo's
+# container image(s) in CI, pushes each to GHCR by immutable digest, attests
+# provenance + SBOM over each image, and cuts a GitHub Release carrying the
+# validation evidence. The on-server pull-agent verifies the attestation and
+# deploys the digests; nothing here ever pushes into a server.
 #
-# Every build action is bound through the caller repo's
-# .github/release-targets.yml manifest (schema: release-targets.schema.json) —
-# this workflow hardcodes NO repo-specific path, filename, or build command.
+# A repo may ship MORE THAN ONE image (a UI host and an API, an app and its
+# docs site, …). It declares the set under `images` (keyed by component) in
+# .github/release-targets.yml; this workflow builds them all, then attests each
+# image in a matrix (one `attest-*` invocation per image — a `uses:` step cannot
+# be looped in a single job). One repo -> one version -> one Release -> N images,
+# deployed atomically by the agent.
+#
+# Every build action is bound through the caller repo's release-targets.yml
+# manifest (schema: release-targets.schema.json) — this workflow hardcodes NO
+# repo-specific path, filename, or build command.
 #
 # Security posture mirrors gxp-traceability.yml: untrusted issue/PR bodies are
 # read from files and passed to Python as data, never interpolated into a shell
@@ -46,7 +53,7 @@ on:
         type: string
         default: "evaluate"
       environment:
-        description: "Optional GitHub Environment gating publish (e.g. production). When set, publish blocks on its required reviewers."
+        description: "Optional GitHub Environment gating publish (e.g. production). When set, the publish job blocks on its required reviewers."
         type: string
         default: ""
       tooling_ref:
@@ -55,19 +62,21 @@ on:
         default: "main"
 
 jobs:
-  release:
+  # ---------------------------------------------------------------------------
+  # Build every component image, push by digest, generate the regulated evidence,
+  # and assemble the image set. No attestation here (that needs a per-image
+  # matrix); no publish of the Release here (that may be gated by an Environment).
+  # ---------------------------------------------------------------------------
+  build:
     runs-on: ubuntu-latest
-    # When `environment` is set (e.g. production), the whole job — including the
-    # publish step — blocks on that Environment's required reviewers. Empty
-    # string means no Environment gate. See docs/release-authorisation.md.
-    environment: ${{ inputs.environment }}
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: read
       packages: write
       issues: read
       pull-requests: read
+    outputs:
+      applicable: ${{ steps.gate.outputs.applicable }}
+      images: ${{ steps.images.outputs.json }}
     env:
       TAG: ${{ inputs.tag }}
       ENFORCEMENT: ${{ inputs.enforcement }}
@@ -76,14 +85,12 @@ jobs:
       STATE_DIR: ${{ github.workspace }}/_release-state
       TOOLING: ${{ github.workspace }}/_release-tooling/scripts
     steps:
-      # 1. Caller repo at the release tag (full history for tag verification).
       - name: Checkout caller at the release tag
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
 
-      # 2. The release tooling (this repo's scripts/release) alongside the caller.
       - name: Checkout release tooling
         uses: actions/checkout@v6
         with:
@@ -123,8 +130,6 @@ jobs:
           echo "applicable=true" >> "$GITHUB_OUTPUT"
           echo "tier=$tier" >> "$GITHUB_OUTPUT"
 
-      # Resolve the manifest path (compliance.release_targets_path or default),
-      # then fail fast if a mandatory target for this tier is missing/unknown.
       - name: Resolve manifest and check the build-target contract
         if: steps.gate.outputs.applicable == 'true'
         env:
@@ -181,26 +186,19 @@ jobs:
             echo "$pin_env=$version" >> "$GITHUB_ENV"
             echo "Pinned $pin_env=$version"
           fi
-          image_ref=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --image-ref || true)
-          echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
-          digest_env=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --digest-env || true)
-          echo "DIGEST_ENV=$digest_env" >> "$GITHUB_ENV"
 
-      # Build -> package (OCI image) -> publish to GHCR by digest. Building here,
-      # in the hardened runner, is what the provenance attestation covers.
-      # The publish:registry target MUST export the pushed digest to $GITHUB_ENV
-      # under the manifest's image.digest_env (e.g. APP_IMAGE_DIGEST=sha256:...).
-      - name: Build, package, and publish the image
+      # Build -> package (all OCI images) -> publish to GHCR by digest. Building
+      # here, in the hardened runner, is what the provenance attestation covers.
+      # The publish:registry target MUST export EACH component's pushed digest to
+      # $GITHUB_ENV under that image's images.<name>.digest_env (e.g.
+      # <APP>_IMAGE_DIGEST=sha256:..., <APP>_API_IMAGE_DIGEST=sha256:...).
+      - name: Build, package, and publish the images
         if: steps.gate.outputs.applicable == 'true'
         run: |
           run_target() {
-            local name="$1" optional="${2:-}"
+            local name="$1"
             local cmd
             if ! cmd=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --run "$name"); then
-              if [ "$optional" = "optional" ]; then
-                echo "Target '$name' not declared — skipping."
-                return 0
-              fi
               echo "::error::Mandatory target '$name' is not declared in $MANIFEST."
               return 1
             fi
@@ -213,90 +211,109 @@ jobs:
           run_target package
           run_target "publish:registry"
 
-      - name: Resolve the pushed image digest
-        if: steps.gate.outputs.applicable == 'true'
-        run: |
-          if [ -z "$DIGEST_ENV" ]; then
-            echo "::error::No image.digest_env declared in the manifest; cannot resolve the pushed digest."
-            exit 1
-          fi
-          digest="${!DIGEST_ENV}"
-          if ! echo "$digest" | grep -qE '^sha256:[0-9a-f]{64}$'; then
-            echo "::error::The publish:registry target did not export a valid sha256 digest to \$$DIGEST_ENV (got '${digest:-<empty>}'). It must write e.g. $DIGEST_ENV=sha256:... to \$GITHUB_ENV."
-            exit 1
-          fi
-          echo "IMAGE_DIGEST=$digest" >> "$GITHUB_ENV"
-          echo "IMAGE=${IMAGE_REF}@${digest}" >> "$GITHUB_ENV"
-          echo "Released image: ${IMAGE_REF}@${digest}"
-
-      # SBOM (regulated-mandatory) -> vulnerability scan.
-      - name: Generate the SBOM
+      # Generate the SBOMs (one per image, per the contract). The files are
+      # resolved per-component below from each image's declared globs.
+      - name: Generate the SBOM(s)
         if: steps.gate.outputs.applicable == 'true'
         run: |
           cmd=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --run sbom)
           echo "+ $cmd"
           bash -c "$cmd"
-          PYTHONPATH="$TOOLING" /tmp/release/bin/python -m release.manifest --manifest "$MANIFEST" --outputs sbom > "$STATE_DIR/sbom-globs.txt"
-          # Resolve the first matching SBOM file from the declared globs.
-          sbom_file=""
-          while IFS= read -r glob; do
-            for f in $glob; do
-              if [ -f "$f" ]; then sbom_file="$f"; break 2; fi
-            done
-          done < "$STATE_DIR/sbom-globs.txt"
-          if [ -z "$sbom_file" ]; then
-            echo "::error::The sbom target produced no file matching its declared outputs."
-            exit 1
-          fi
-          echo "SBOM_FILE=$sbom_file" >> "$GITHUB_ENV"
-          echo "SBOM: $sbom_file"
+
+      # Assemble the released image set: for each declared component, read back
+      # its pushed digest, resolve its SBOM file, and emit the matrix-facing JSON
+      # plus an internal images.json (with source paths) for the steps below.
+      - name: Resolve digests and assemble the image set
+        id: images
+        if: steps.gate.outputs.applicable == 'true'
+        run: |
+          PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
+          import glob, json, os, re
+
+          from release import manifest as M
+
+          m = M.load(os.environ["MANIFEST"])
+          names = M.component_names(m)
+          if not names:
+              print("::error::No images declared in the manifest. This release workflow builds container-image repos; declare images[] (a package-only repo is not yet supported).")
+              raise SystemExit(1)
+
+          target_sbom_globs = M.outputs(m, "sbom")
+          state = os.environ["STATE_DIR"]
+          images = []
+          for name in names:
+              ref = M.component_ref(m, name)
+              digest_env = M.component_digest_env(m, name)
+              digest = os.environ.get(digest_env or "", "")
+              if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+                  print(f"::error::publish:registry did not export a valid sha256 digest for component '{name}' to ${digest_env} (got '{digest or '<empty>'}'). It must write {digest_env}=sha256:... to $GITHUB_ENV.")
+                  raise SystemExit(1)
+              globs = M.component_sbom_globs(m, name) or target_sbom_globs
+              sbom_src = ""
+              for g in globs:
+                  hits = sorted(glob.glob(g))
+                  if hits:
+                      sbom_src = hits[0]
+                      break
+              if not sbom_src:
+                  print(f"::error::No SBOM file found for component '{name}' (looked in: {globs or '[]'}). Each image needs an SBOM.")
+                  raise SystemExit(1)
+              images.append({
+                  "name": name,
+                  "ref": ref,
+                  "digest": digest,
+                  "sbom": os.path.basename(sbom_src),
+                  "sbom_src": sbom_src,
+              })
+
+          with open(os.path.join(state, "images.json"), "w") as f:
+              json.dump(images, f)
+          # Matrix-facing form drops the build-local source path.
+          matrix = [{k: v for k, v in img.items() if k != "sbom_src"} for img in images]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("json=" + json.dumps(matrix, separators=(",", ":")) + "\n")
+          for img in images:
+              print(f"Released image: {img['ref']}@{img['digest']}  (sbom: {img['sbom']})")
+          PY
 
       - name: Install grype
         if: steps.gate.outputs.applicable == 'true'
         run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
+      # One scan per image SBOM; the gate aggregates — in active mode the release
+      # fails if ANY image carries a critical/high finding.
       - name: Vulnerability scan
         if: steps.gate.outputs.applicable == 'true'
         run: |
-          grype "sbom:$SBOM_FILE" -o json > "$STATE_DIR/grype.json" || true
           blocking=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
-          import json, os
+          import json, os, subprocess
+
           from release import sbom_scan
-          with open(os.path.join(os.environ["STATE_DIR"], "grype.json")) as f:
-              data = json.load(f)
-          result = sbom_scan.summarize(data)
+
+          state = os.environ["STATE_DIR"]
+          images = json.load(open(os.path.join(state, "images.json")))
+          any_blocking = False
+          summary = []
+          for img in images:
+              out = subprocess.run(
+                  ["grype", f"sbom:{img['sbom_src']}", "-o", "json"],
+                  capture_output=True, text=True,
+              ).stdout or "{}"
+              result = sbom_scan.summarize(json.loads(out))
+              summary.append(f"### {img['name']}\n\n{result.markdown}")
+              any_blocking = any_blocking or result.has_blocking
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-              f.write(result.markdown)
-          print("1" if result.has_blocking else "0")
+              f.write("\n".join(summary))
+          print("1" if any_blocking else "0")
           PY
           )
           if [ "$blocking" = "1" ]; then
             if [ "$ENFORCEMENT" = "active" ]; then
-              echo "::error::Critical/High vulnerabilities present — failing active release."
+              echo "::error::Critical/High vulnerabilities present in at least one image — failing active release."
               exit 1
             fi
             echo "::warning::[evaluate-mode] Critical/High vulnerabilities present — would fail in active mode."
           fi
-
-      # Keyless, OIDC-bound, transparency-logged attestations over the IMAGE
-      # DIGEST (not a file). An image built by anything other than this workflow
-      # fails the agent's verification.
-      - name: Attest build provenance
-        if: steps.gate.outputs.applicable == 'true'
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: ${{ env.IMAGE_REF }}
-          subject-digest: ${{ env.IMAGE_DIGEST }}
-          push-to-registry: true
-
-      - name: Attest SBOM
-        if: steps.gate.outputs.applicable == 'true'
-        uses: actions/attest-sbom@v2
-        with:
-          subject-name: ${{ env.IMAGE_REF }}
-          subject-digest: ${{ env.IMAGE_DIGEST }}
-          sbom-path: ${{ env.SBOM_FILE }}
-          push-to-registry: true
 
       # Validation report (regulated-mandatory). No report -> no Release.
       - name: Generate the validation report
@@ -323,13 +340,20 @@ jobs:
         run: |
           mkdir -p "$STATE_DIR/assets"
           cp "$VALIDATION_REPORT" "$STATE_DIR/assets/"
-          cp "$SBOM_FILE" "$STATE_DIR/assets/"
+          # Every image's SBOM is a release asset and is checksummed.
+          PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
+          import json, os, shutil
+          state = os.environ["STATE_DIR"]
+          for img in json.load(open(os.path.join(state, "images.json"))):
+              shutil.copy(img["sbom_src"], os.path.join(state, "assets", img["sbom"]))
+          PY
           ( cd "$STATE_DIR/assets" && sha256sum ./* > SHA256SUMS )
           echo "Assets:"
           ls -1 "$STATE_DIR/assets"
 
-      # Milestone-scoped notes + CtQ traceability matrix. Issue bodies are
-      # fetched to a file and read as data — never interpolated into source.
+      # Milestone-scoped notes + CtQ traceability matrix + the released-image
+      # table. Issue bodies are fetched to a file and read as data — never
+      # interpolated into source.
       - name: Generate release notes
         if: steps.gate.outputs.applicable == 'true'
         env:
@@ -337,7 +361,6 @@ jobs:
           MILESTONE: ${{ inputs.milestone }}
         run: |
           milestone="${MILESTONE:-$TAG}"
-          # Map milestone title -> number, then list its closed issues.
           number=$(gh api "repos/$REPO/milestones?state=all" \
             --jq ".[] | select(.title == \"$milestone\") | .number" | head -n1)
           if [ -n "$number" ]; then
@@ -372,6 +395,11 @@ jobs:
               def milestone_items(self, repo, milestone):
                   return items
 
+          # name -> full pinned ref, for the released-image table.
+          released = {
+              img["name"]: f"{img['ref']}@{img['digest']}"
+              for img in json.load(open(os.path.join(state, "images.json")))
+          }
           compliance = yaml.safe_load(open(os.environ["COMPLIANCE_PATH"])) or {}
           md = notes.build_notes(
               repo=os.environ["REPO"],
@@ -380,20 +408,101 @@ jobs:
               prev_tag=os.environ.get("PREV_TAG") or "",
               compliance=compliance,
               evidence=_Evidence(),
+              images=released,
           )
-          image = os.environ.get("IMAGE", "")
-          header = f"> **Released image:** `{image}`\n\n" if image else ""
           with open(os.path.join(state, "notes.md"), "w") as f:
-              f.write(header + md)
+              f.write(md)
           PY
-          echo "NOTES_FILE=$STATE_DIR/notes.md" >> "$GITHUB_ENV"
+          echo "Notes generated."
+
+      - name: Upload the release bundle
+        if: steps.gate.outputs.applicable == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: _release-state
+          retention-days: 5
+          include-hidden-files: true
+
+      - name: Not a regulated repo
+        if: steps.gate.outputs.applicable != 'true'
+        run: echo "Release workflow not applicable to this repo (no .compliance.yml or regulatory_tier=none)."
+
+  # ---------------------------------------------------------------------------
+  # Attest each image independently: keyless, OIDC-bound, transparency-logged
+  # provenance + SBOM over the image DIGEST. One matrix leg per image — an image
+  # built by anything other than this workflow fails the agent's verification.
+  # ---------------------------------------------------------------------------
+  attest:
+    needs: build
+    if: needs.build.outputs.applicable == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.build.outputs.images) }}
+    steps:
+      - name: Download the release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: _release-state
+
+      - name: Log in to GHCR
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ matrix.component.ref }}
+          subject-digest: ${{ matrix.component.digest }}
+          push-to-registry: true
+
+      - name: Attest SBOM
+        uses: actions/attest-sbom@v2
+        with:
+          subject-name: ${{ matrix.component.ref }}
+          subject-digest: ${{ matrix.component.digest }}
+          sbom-path: _release-state/assets/${{ matrix.component.sbom }}
+          push-to-registry: true
+
+  # ---------------------------------------------------------------------------
+  # Publish the Release. When `environment` is set (e.g. production), THIS job
+  # blocks on that Environment's required reviewers — so the approver who
+  # authorises the release is recorded here, post-approval. Draft in evaluate,
+  # published in active.
+  # ---------------------------------------------------------------------------
+  release:
+    needs: [build, attest]
+    if: needs.build.outputs.applicable == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      actions: read
+    env:
+      TAG: ${{ inputs.tag }}
+      ENFORCEMENT: ${{ inputs.enforcement }}
+      REPO: ${{ github.repository }}
+      STATE_DIR: ${{ github.workspace }}/_release-state
+    steps:
+      - name: Download the release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: _release-state
 
       # When gated by an Environment, this job only runs once a required reviewer
       # has approved — so we can record who authorised the release. This is the
       # technical-evidence half; the formal e-signature of record is captured per
       # docs/release-authorisation.md.
       - name: Fill the release authorisation block
-        if: steps.gate.outputs.applicable == 'true' && inputs.environment != ''
+        if: inputs.environment != ''
         env:
           GH_TOKEN: ${{ github.token }}
           ENVIRONMENT: ${{ inputs.environment }}
@@ -401,7 +510,7 @@ jobs:
           gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID/approvals" \
             > "$STATE_DIR/approvals.json" 2>/dev/null || echo "[]" > "$STATE_DIR/approvals.json"
           NOW_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-          PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
+          python3 <<'PY'
           import json, os
           state = os.environ["STATE_DIR"]
           with open(os.path.join(state, "approvals.json")) as f:
@@ -412,6 +521,10 @@ jobs:
               if e.get("state") == "approved" and (e.get("user") or {}).get("login")
           })
           approver = ", ".join(approvers) or "_unrecorded_"
+          digests = "; ".join(
+              f"{img['name']} {img['ref']}@{img['digest']}"
+              for img in json.load(open(os.path.join(state, "images.json")))
+          )
           marker = "## Release authorisation"
           notes_path = os.path.join(state, "notes.md")
           md = open(notes_path).read()
@@ -420,22 +533,24 @@ jobs:
               f"{marker}\n\n"
               f"- **Approved by:** {approver}\n"
               f"- **Approved at (UTC):** {os.environ.get('NOW_UTC', '')}\n"
-              f"- **Released image digest:** `{os.environ.get('IMAGE_DIGEST', '')}`\n"
+              f"- **Released image digests:** {digests}\n"
               f"- **Environment:** {os.environ.get('ENVIRONMENT', '')}\n\n"
               "The formal electronic signature of record (re-authentication + "
               "explicit meaning + signer role) is captured in the application "
-              "signature flow or the CTU QMS/eTMF, referencing the digest above — "
+              "signature flow or the CTU QMS/eTMF, referencing the digests above — "
               "see docs/release-authorisation.md.\n"
           )
           open(notes_path, "w").write(head + block)
           PY
 
       - name: Create the Release
-        if: steps.gate.outputs.applicable == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          args=( "$TAG" --target "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" )
+          shopt -s nullglob
+          assets=( "$STATE_DIR"/assets/* )
+          args=( "$TAG" --title "$TAG" --notes-file "$STATE_DIR/notes.md" )
           # Draft in evaluate; published in active.
           if [ "$ENFORCEMENT" != "active" ]; then
             args+=( --draft )
@@ -445,27 +560,21 @@ jobs:
             *-rc*|*-beta*) args+=( --prerelease ) ;;
             *)            [ "$ENFORCEMENT" = "active" ] && args+=( --latest ) ;;
           esac
-          gh release create "${args[@]}" \
-            "$STATE_DIR/assets/$(basename "$VALIDATION_REPORT")" \
-            "$STATE_DIR/assets/$(basename "$SBOM_FILE")" \
-            "$STATE_DIR/assets/SHA256SUMS"
+          gh release create "${args[@]}" "${assets[@]}"
 
       - name: Release manifest summary
-        if: steps.gate.outputs.applicable == 'true'
         run: |
           {
             echo "## Release ${TAG}"
             echo ""
             echo "| Item | Value |"
             echo "|---|---|"
-            echo "| Image | \`${IMAGE}\` |"
             echo "| Enforcement | \`${ENFORCEMENT}\` (draft if evaluate) |"
-            echo "| Validation report | \`$(basename "$VALIDATION_REPORT")\` |"
-            echo "| SBOM | \`$(basename "$SBOM_FILE")\` |"
             echo "| Checksums | \`SHA256SUMS\` |"
-            echo "| Provenance + SBOM attestations | over \`${IMAGE_DIGEST}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Not a regulated repo
-        if: steps.gate.outputs.applicable != 'true'
-        run: echo "Release workflow not applicable to this repo (no .compliance.yml or regulatory_tier=none)."
+          python3 <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          state = os.environ["STATE_DIR"]
+          for img in json.load(open(os.path.join(state, "images.json"))):
+              print(f"| Image `{img['name']}` | `{img['ref']}@{img['digest']}` (provenance + SBOM attested) |")
+          PY

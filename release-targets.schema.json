@@ -17,26 +17,40 @@
       "type": "string",
       "minLength": 1
     },
-    "image": {
-      "description": "For hosted apps that package a container image: where `publish:registry` pushes it and which env var the build stamps the pushed digest into. Omit for repos whose distributable is a package (nupkg/zip) rather than an image.",
+    "images": {
+      "description": "For hosted apps that ship one or more container images: the set of component images this repo builds, keyed by component name (e.g. trialview, trialview-api). The build's `package` target produces all of them and `publish:registry` pushes each; the workflow attests and references each independently, and the on-server agent pins each digest. A single-image repo declares one entry. Omit entirely for repos whose distributable is a package (nupkg/zip) rather than an image.",
       "type": "object",
-      "additionalProperties": false,
-      "required": ["registry", "repository", "digest_env"],
-      "properties": {
-        "registry": {
-          "description": "Container registry host, e.g. ghcr.io.",
-          "type": "string",
-          "minLength": 1
-        },
-        "repository": {
-          "description": "Image repository path within the registry, e.g. cctc-team/trialview.",
-          "type": "string",
-          "minLength": 1
-        },
-        "digest_env": {
-          "description": "Environment variable the `publish:registry` target writes the pushed image's sha256 digest into, so the workflow can attest and reference that exact digest.",
-          "type": "string",
-          "minLength": 1
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["registry", "repository", "digest_env"],
+        "properties": {
+          "registry": {
+            "description": "Container registry host, e.g. ghcr.io.",
+            "type": "string",
+            "minLength": 1
+          },
+          "repository": {
+            "description": "Image repository path within the registry, e.g. cctc-team/trialview.",
+            "type": "string",
+            "minLength": 1
+          },
+          "digest_env": {
+            "description": "Environment variable the `publish:registry` target writes THIS image's pushed sha256 digest into, so the workflow can attest and reference that exact digest and the agent can pin it. Each image needs its own.",
+            "type": "string",
+            "minLength": 1
+          },
+          "sbom": {
+            "description": "Optional glob(s) for the CycloneDX SBOM file the `sbom` target produces for THIS image, so the workflow can attest the SBOM to this specific image digest.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },

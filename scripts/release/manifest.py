@@ -38,13 +38,22 @@ def outputs(manifest: dict, target: str) -> list[str]:
     return list(_target(manifest, target).get("outputs") or [])
 
 
-def _image(manifest: dict) -> dict:
-    return (manifest or {}).get("image") or {}
+def _images(manifest: dict) -> dict:
+    return (manifest or {}).get("images") or {}
 
 
-def image_ref(manifest: dict) -> Optional[str]:
-    """``<registry>/<repository>`` for hosted apps, or None if no image block."""
-    img = _image(manifest)
+def component_names(manifest: dict) -> list[str]:
+    """Sorted names of the component images this repo ships (empty if none)."""
+    return sorted(_images(manifest).keys())
+
+
+def _component(manifest: dict, name: str) -> dict:
+    return _images(manifest).get(name) or {}
+
+
+def component_ref(manifest: dict, name: str) -> Optional[str]:
+    """``<registry>/<repository>`` for one component image, or None if unknown."""
+    img = _component(manifest, name)
     registry = img.get("registry")
     repository = img.get("repository")
     if registry and repository:
@@ -52,8 +61,14 @@ def image_ref(manifest: dict) -> Optional[str]:
     return None
 
 
-def digest_env(manifest: dict) -> Optional[str]:
-    return _image(manifest).get("digest_env")
+def component_digest_env(manifest: dict, name: str) -> Optional[str]:
+    """The env var the build stamps this component's pushed digest into."""
+    return _component(manifest, name).get("digest_env") or None
+
+
+def component_sbom_globs(manifest: dict, name: str) -> list[str]:
+    """Declared SBOM output glob(s) for this component image (empty if none)."""
+    return list(_component(manifest, name).get("sbom") or [])
 
 
 def version_pin_env(manifest: dict) -> Optional[str]:
@@ -66,8 +81,10 @@ def _main(argv: Optional[list[str]] = None) -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--run", metavar="TARGET", help="Print the target's run command.")
     group.add_argument("--outputs", metavar="TARGET", help="Print the target's output globs, one per line.")
-    group.add_argument("--image-ref", action="store_true", help="Print <registry>/<repository>.")
-    group.add_argument("--digest-env", action="store_true", help="Print the image digest env var name.")
+    group.add_argument("--list-components", action="store_true", help="Print component image names, one per line (sorted).")
+    group.add_argument("--component-ref", metavar="NAME", help="Print one component's <registry>/<repository>.")
+    group.add_argument("--component-digest-env", metavar="NAME", help="Print one component's digest env var name.")
+    group.add_argument("--component-sbom", metavar="NAME", help="Print one component's SBOM output globs, one per line.")
     group.add_argument("--version-pin-env", action="store_true", help="Print the version-pin env var name.")
     args = parser.parse_args(argv)
 
@@ -84,12 +101,20 @@ def _main(argv: Optional[list[str]] = None) -> int:
         for glob in outputs(m, args.outputs):
             print(glob)
         return 0
+    if args.list_components:
+        for name in component_names(m):
+            print(name)
+        return 0
+    if args.component_sbom is not None:
+        for glob in component_sbom_globs(m, args.component_sbom):
+            print(glob)
+        return 0
 
     value = None
-    if args.image_ref:
-        value = image_ref(m)
-    elif args.digest_env:
-        value = digest_env(m)
+    if args.component_ref is not None:
+        value = component_ref(m, args.component_ref)
+    elif args.component_digest_env is not None:
+        value = component_digest_env(m, args.component_digest_env)
     elif args.version_pin_env:
         value = version_pin_env(m)
 

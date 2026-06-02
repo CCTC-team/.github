@@ -20,13 +20,24 @@ build_tool: FAKE   # TODO: your build tool (FAKE / MSBuild / Cake / npm / Make)
 # version a tag names, instead of self-computing one.
 version_pin_env: TRIALVIEW_BUILD_VERSION   # TODO: your build's version-pin env var
 
-# Hosted apps only: where `publish:registry` pushes the image, and the env var
-# your build stamps the pushed sha256 digest into. Delete this block entirely
-# if your distributable is a package (nupkg/zip) rather than a container image.
-image:
-  registry: ghcr.io                         # TODO: your registry host
-  repository: cctc-team/trialview           # TODO: your image repository path
-  digest_env: TRIALVIEW_IMAGE_DIGEST        # TODO: env var your push writes the digest into
+# Hosted apps only: the container image(s) this repo ships, keyed by component.
+# TrialView is TWO images — the Blazor host and the F# API — each built, pushed,
+# attested, and pinned independently (one process per container). A repo with a
+# single image declares one entry here; delete the whole block if your
+# distributable is a package (nupkg/zip) rather than a container image.
+images:
+  trialview:                                  # TODO: your component name (the compose service)
+    registry: ghcr.io                         # TODO: your registry host
+    repository: cctc-team/trialview           # TODO: your image repository path
+    digest_env: TRIALVIEW_IMAGE_DIGEST        # TODO: env var your push writes THIS image's digest into
+    sbom:
+      - "artifacts/trialview.cdx.json"        # TODO: this image's SBOM path
+  trialview-api:                              # TODO: second component
+    registry: ghcr.io                         # TODO
+    repository: cctc-team/trialview-api       # TODO
+    digest_env: TRIALVIEW_API_IMAGE_DIGEST    # TODO: a SEPARATE digest env var per image
+    sbom:
+      - "artifacts/trialview-api.cdx.json"    # TODO: this image's SBOM path
 
 # Each target maps a canonical name to the command this repo runs and,
 # optionally, globs for the files it produces (so the workflow can collect
@@ -58,10 +69,12 @@ targets:
     run: dotnet run --project ./build/build.fsproj -- --target Package   # TODO
 
   publish:registry:
-    # Push to GHCR by digest. IMPORTANT: this target must export the pushed
-    # sha256 digest to $GITHUB_ENV under image.digest_env, e.g.:
+    # Push EACH image to GHCR by digest. IMPORTANT: this target must export the
+    # pushed sha256 digest of EACH image to $GITHUB_ENV under that image's
+    # images.<name>.digest_env, e.g.:
     #   echo "TRIALVIEW_IMAGE_DIGEST=sha256:$(...)" >> "$GITHUB_ENV"
-    # The release workflow reads it back to attest and reference the exact image.
+    #   echo "TRIALVIEW_API_IMAGE_DIGEST=sha256:$(...)" >> "$GITHUB_ENV"
+    # The release workflow reads them back to attest and reference each image.
     run: dotnet run --project ./build/build.fsproj -- --target Publish   # TODO
 
   deploy:staging:
@@ -92,7 +105,9 @@ targets:
       - "docs/validation/validation-report.md"   # TODO: your declared report path
 
   sbom:
-    # Generate a CycloneDX / SPDX SBOM.
-    run: dotnet CycloneDX ./TrialView.sln -o ./artifacts   # TODO
+    # Generate one CycloneDX / SPDX SBOM PER IMAGE, written to the paths each
+    # image declares under images.<name>.sbom above. The workflow attests each
+    # SBOM to its own image digest.
+    run: ./build/sbom-all.sh   # TODO: emit one SBOM per image (e.g. one per Dockerfile/project)
     outputs:
-      - "artifacts/bom.json"   # TODO: your declared SBOM path
+      - "artifacts/*.cdx.json"   # TODO: all per-image SBOMs (fallback for a single-image repo)

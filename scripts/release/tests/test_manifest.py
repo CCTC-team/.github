@@ -13,10 +13,18 @@ from release import manifest
 SAMPLE = {
     "build_tool": "FAKE",
     "version_pin_env": "APP_BUILD_VERSION",
-    "image": {
-        "registry": "ghcr.io",
-        "repository": "cctc-team/trialview",
-        "digest_env": "APP_IMAGE_DIGEST",
+    "images": {
+        "trialview": {
+            "registry": "ghcr.io",
+            "repository": "cctc-team/trialview",
+            "digest_env": "TRIALVIEW_IMAGE_DIGEST",
+            "sbom": ["bom/trialview.cdx.json"],
+        },
+        "trialview-api": {
+            "registry": "ghcr.io",
+            "repository": "cctc-team/trialview-api",
+            "digest_env": "TRIALVIEW_API_IMAGE_DIGEST",
+        },
     },
     "targets": {
         "build": {"run": "dotnet build -c Release"},
@@ -48,17 +56,69 @@ class TestOutputs:
         assert manifest.outputs(SAMPLE, "nope") == []
 
 
-class TestImageBlock:
-    def test_image_ref_joins_registry_and_repository(self):
-        assert manifest.image_ref(SAMPLE) == "ghcr.io/cctc-team/trialview"
+NO_IMAGES = {"targets": {"build": {"run": "x"}}}
 
-    def test_digest_env(self):
-        assert manifest.digest_env(SAMPLE) == "APP_IMAGE_DIGEST"
 
-    def test_image_helpers_none_when_no_image_block(self):
-        no_image = {"targets": {"build": {"run": "x"}}}
-        assert manifest.image_ref(no_image) is None
-        assert manifest.digest_env(no_image) is None
+class TestComponents:
+    def test_component_names_are_sorted(self):
+        assert manifest.component_names(SAMPLE) == ["trialview", "trialview-api"]
+
+    def test_component_names_empty_when_no_images(self):
+        assert manifest.component_names(NO_IMAGES) == []
+
+    def test_component_ref_joins_registry_and_repository(self):
+        assert manifest.component_ref(SAMPLE, "trialview") == "ghcr.io/cctc-team/trialview"
+        assert manifest.component_ref(SAMPLE, "trialview-api") == "ghcr.io/cctc-team/trialview-api"
+
+    def test_component_ref_none_for_unknown(self):
+        assert manifest.component_ref(SAMPLE, "nope") is None
+
+    def test_component_digest_env(self):
+        assert manifest.component_digest_env(SAMPLE, "trialview") == "TRIALVIEW_IMAGE_DIGEST"
+        assert manifest.component_digest_env(SAMPLE, "trialview-api") == "TRIALVIEW_API_IMAGE_DIGEST"
+
+    def test_component_digest_env_none_for_unknown(self):
+        assert manifest.component_digest_env(SAMPLE, "nope") is None
+
+    def test_component_sbom_globs(self):
+        assert manifest.component_sbom_globs(SAMPLE, "trialview") == ["bom/trialview.cdx.json"]
+
+    def test_component_sbom_globs_empty_when_absent(self):
+        assert manifest.component_sbom_globs(SAMPLE, "trialview-api") == []
+
+
+class TestCli:
+    def _write(self, tmp_path):
+        import yaml
+
+        p = tmp_path / "release-targets.yml"
+        p.write_text(yaml.safe_dump(SAMPLE))
+        return str(p)
+
+    def test_list_components_sorted_one_per_line(self, tmp_path, capsys):
+        rc = manifest._main(["--manifest", self._write(tmp_path), "--list-components"])
+        assert rc == 0
+        assert capsys.readouterr().out.split() == ["trialview", "trialview-api"]
+
+    def test_component_ref_cli(self, tmp_path, capsys):
+        rc = manifest._main(
+            ["--manifest", self._write(tmp_path), "--component-ref", "trialview-api"]
+        )
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "ghcr.io/cctc-team/trialview-api"
+
+    def test_component_digest_env_cli(self, tmp_path, capsys):
+        rc = manifest._main(
+            ["--manifest", self._write(tmp_path), "--component-digest-env", "trialview"]
+        )
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "TRIALVIEW_IMAGE_DIGEST"
+
+    def test_unknown_component_ref_cli_nonzero(self, tmp_path, capsys):
+        rc = manifest._main(
+            ["--manifest", self._write(tmp_path), "--component-ref", "nope"]
+        )
+        assert rc == 3
 
 
 class TestVersionPinEnv:

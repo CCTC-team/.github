@@ -171,11 +171,31 @@ def _governing_documents(compliance: dict) -> list[str]:
     return lines
 
 
-def build_notes(repo, milestone, tag, prev_tag, compliance, evidence) -> str:
+def _released_images(images: Optional[dict]) -> list[str]:
+    """A table of the component images this release publishes, by digest.
+
+    ``images`` maps each component name to its full pinned ref
+    (``<registry>/<repository>@sha256:…``). A repo with one image renders one
+    row; a multi-component repo renders one row per image. Omitted entirely when
+    no images are supplied (e.g. a package-distributable repo).
+    """
+    if not images:
+        return []
+    lines = ["## Released images", "", "| Component | Image |", "|---|---|"]
+    for name in sorted(images):
+        lines.append(f"| {name} | `{images[name]}` |")
+    lines.append("")
+    return lines
+
+
+def build_notes(repo, milestone, tag, prev_tag, compliance, evidence, images=None) -> str:
     """Render the full markdown release notes for ``milestone``.
 
     ``compliance`` is the parsed ``.compliance.yml`` (or ``{}``); ``evidence``
     supplies the milestone's items via ``milestone_items(repo, milestone)``.
+    ``images`` maps each published component name to its pinned
+    ``<registry>/<repository>@sha256:…`` ref, rendered as the released-image
+    table (one row per image); pass ``None`` for a repo that ships no image.
     """
     items = list(evidence.milestone_items(repo, milestone))
 
@@ -184,6 +204,7 @@ def build_notes(repo, milestone, tag, prev_tag, compliance, evidence) -> str:
         summary += f" Changes since **{prev_tag}**."
 
     lines = [f"# {repo} {tag}", "", summary, ""]
+    lines += _released_images(images)
     lines += _changelog(items)
     lines += _traceability_matrix(items, compliance or {})
     lines += _governing_documents(compliance or {})
@@ -191,7 +212,7 @@ def build_notes(repo, milestone, tag, prev_tag, compliance, evidence) -> str:
         "## Release authorisation",
         "",
         "_To be completed at the `production` Environment approval: approver "
-        "identity, UTC timestamp, and the released image digest "
+        "identity, UTC timestamp, and the released image digest(s) "
         "(`ghcr.io/…@sha256:…`)._",
         "",
     ]

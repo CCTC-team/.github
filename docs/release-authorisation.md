@@ -24,8 +24,8 @@ Configure it once, per repo:
 
 When the release workflow reaches the publish job in `active` mode, it pauses;
 GitHub records **who** approved, **when** (UTC), and the run is bound to the exact
-**image digest** being released. That approval is logged, timestamped, and
-attributable.
+**image digest(s)** being released (one per component image). That approval is
+logged, timestamped, and attributable.
 
 ### Ordering: this is the `QA approved → Released` gate
 
@@ -90,8 +90,8 @@ immutable artifact.
 
 When `environment` is set, the release workflow's publish job runs under that
 Environment and fills the notes' `## Release authorisation` block with the
-approver identity, the UTC approval timestamp, and the released image digest —
-the technical-evidence half of the picture. The block also points to where the
+approver identity, the UTC approval timestamp, and the released image digest(s)
+(one per component image) — the technical-evidence half of the picture. The block also points to where the
 formal e-signature of record is held, so an inspector can follow it from the
 Release to the signed QMS/app record.
 

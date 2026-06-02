@@ -43,8 +43,8 @@ factor FRM129-…"* — a per-commit micro-tag could never make that claim.
         │
         ▼
   ┌─────────────────────── CI: reusable release workflow ───────────────────────┐
-  │  build ─► package (OCI image) ─► publish:registry (GHCR, by digest)          │
-  │  sbom ─► vulnerability scan ─► attest provenance + SBOM over the image       │
+  │  build ─► package (OCI image(s), one per component) ─► publish:registry      │
+  │  sbom (one per image) ─► vuln scan ─► attest prov + SBOM over EACH image      │
   │  validation-docs ─► SHA256SUMS ─► milestone-scoped notes + CtQ matrix        │
   │  gh release create:   evaluate → DRAFT    |    active → PUBLISHED (gated)     │
   └──────────────────────────────────────────────────────────────────────────────┘
@@ -78,18 +78,21 @@ gate, not earlier on the board.
 
 ## What every regulated Release carries
 
-Each published Release for a regulated repo bundles the evidence below. The image
-itself lives in GHCR (referenced by digest), not as a Release asset.
+Each published Release for a regulated repo bundles the evidence below. A repo
+ships **one or more component images** (e.g. a Blazor host *and* an F# API); each
+image is listed by digest, attested, and SBOM'd independently, and the agent
+deploys the set atomically. The images live in GHCR (referenced by digest), not
+as Release assets.
 
 | Artifact | What it is | Clause it answers |
 | --- | --- | --- |
-| **Image digest** (`ghcr.io/…@sha256:…`) | The exact, immutable artifact that runs | ICH E6(R3) §4.3.4 (validated state is the thing deployed); ALCOA+ *Original* |
-| **Build provenance attestation** | Keyless, OIDC-bound, transparency-logged proof the image was built by the release workflow | ICH E6(R3) §4.3.5 (controlled release); ALCOA+ *Attributable* |
-| **SBOM + its attestation** | CycloneDX bill of materials, signed | Cyber Essentials / supply-chain; dependency vulnerability posture |
+| **Image digest(s)** (`ghcr.io/…@sha256:…`, one per component) | The exact, immutable artifact(s) that run | ICH E6(R3) §4.3.4 (validated state is the thing deployed); ALCOA+ *Original* |
+| **Build provenance attestation** (per image) | Keyless, OIDC-bound, transparency-logged proof each image was built by the release workflow | ICH E6(R3) §4.3.5 (controlled release); ALCOA+ *Attributable* |
+| **SBOM + its attestation** (per image) | CycloneDX bill of materials, signed, one per image | Cyber Essentials / supply-chain; dependency vulnerability posture |
 | **Validation report** | CtQ → URS → V&V → acceptance → QA summary for the milestone | ICH E6(R3) §4.3.4 (validation evidence) |
 | **CtQ traceability matrix** | CtQ factor (FRM129) → Risk → Requirement → `.feature` → acceptance/QA approver | ICH E6(R3) Principle 6 (CtQ); ALCOA+ *Complete* |
 | **`SHA256SUMS`** | Checksums over the attached file assets | ALCOA+ *Accurate*, tamper evidence |
-| **Release authorisation record** | Approver identity + UTC + image digest, from the Environment approval | ICH E6(R3) §4.3.5; ALCOA+ *Contemporaneous*, *Attributable* |
+| **Release authorisation record** | Approver identity + UTC + image digest(s), from the Environment approval | ICH E6(R3) §4.3.5; ALCOA+ *Contemporaneous*, *Attributable* |
 
 Inspector "where is X" shortcut: the image and its provenance are in **GHCR**;
 the validation report, SBOM, checksums, notes and authorisation block are on the

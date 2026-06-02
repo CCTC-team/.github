@@ -30,7 +30,7 @@ For an overview of CCTC and the software we publish, see the
 | `.github/workflows/compliance-check.yml` | Reusable workflow regulated repos opt into |
 | `.github/workflows/compliance-drift.yml` | Nightly drift correction across regulated repos |
 | `.github/workflows/gxp-traceability.yml` | Reusable PR gate enforcing Risk ID + Requirement ID traceability on changes to validated paths |
-| `.github/workflows/release.yml` | Reusable release workflow: builds + signs the container image, pushes to GHCR by digest, attests provenance + SBOM, and cuts a Release with the validation evidence (see [Release process](#release-process)) |
+| `.github/workflows/release.yml` | Reusable release workflow: builds + signs the repo's container image(s) — one per component — pushes each to GHCR by digest, attests provenance + SBOM per image (matrix), and cuts a Release with the validation evidence (see [Release process](#release-process)) |
 | `.github/workflows/project-enforcement.yml` | 5-minute poller that diffs the regulated lifecycle board(s) and dispatches each card change to the checks under `scripts/project_enforcement/` |
 | `.github/workflows/project-card-promote.yml` | Reusable PR-driven forward-only promoter (Code review / V&V tests pass). Callers live in regulated repos. |
 | `.github/workflows/project-audit.yml` | Nightly sweep that maintains a rolling `Project enforcement drift` issue per board |
@@ -722,10 +722,12 @@ it leaves behind. Three orthogonal layers:
 - **Release** — what was published, on a signed `vX.Y.Z` tag, with its evidence.
 
 The deploy model is **pull, never push**: production accepts no inbound
-connection. CI builds and signs a container **image**, pushes it to GHCR by
-immutable digest, and cuts a Release gated by a `production` Environment
-approval. An agent **on the server** verifies the image's keyless attestation
-against the release workflow's identity, pulls it **by digest**, and runs it.
+connection. CI builds and signs the repo's container **image(s)** — one per
+deployable component (e.g. a Blazor host *and* its F# API) — pushes each to GHCR
+by immutable digest, attests every image, and cuts one Release gated by a
+`production` Environment approval. An agent **on the server** verifies each
+image's keyless attestation against the release workflow's identity, pulls them
+**by digest**, and runs the set atomically.
 The build↔workflow binding is a per-repo manifest (`.github/release-targets.yml`,
 schema [`release-targets.schema.json`](release-targets.schema.json)) against the
 tool-agnostic build-target contract in claude-org

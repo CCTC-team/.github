@@ -115,6 +115,12 @@ signed-tag targets) is called out as separate PRs.
    a bundle, not the running image, and re-introduces the WASM-bloat/non-determinism
    noted in TrialView plan 0012. The compose files move from `build:` to
    `image: ...@sha256:<digest>`.
+   **Update (component-aware):** "the container image" is now **a set of component
+   images** — a repo (e.g. TrialView: Blazor host + F# API) declares N images in the
+   manifest's `images` map; the workflow builds/attests each and the Release lists all,
+   deployed atomically. The single-image wording above was generalised by
+   `AIPlans/InProgress/Component-aware multi-image release plan.md`; Phase 3's "image"
+   steps are now per-component (matrix attest).
 
 3. **Keyless attestation, verified on the server against a pinned identity.**
    `actions/attest-build-provenance` + `actions/attest-sbom` mint keyless,
