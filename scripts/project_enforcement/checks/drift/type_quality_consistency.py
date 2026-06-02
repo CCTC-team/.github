@@ -23,11 +23,13 @@ def check(change, ctx, evidence=None) -> None:
 
     tier = ctq.tier(fields)
     test_type = (fields.get("Test Type") or "").strip()
-    if test_type not in _MISSING_TEST_TYPES:
-        return
-
     shown = test_type or "_unset_"
+
     if tier == "critical":
+        # A Critical factor needs a Test Type that includes PQ. A present
+        # but non-PQ type (e.g. OQ) is just as inconsistent as N/A.
+        if test_type in ctq.CRITICAL_TEST_TYPES:
+            return
         body = (
             "**Inconsistent combination — Critical-to-Quality vs Test Type**\n\n"
             f"A Critical `Critical-to-Quality` factor requires a Test Type that includes PQ "
@@ -35,6 +37,10 @@ def check(change, ctx, evidence=None) -> None:
             "set a Test Type appropriate for a critical feature."
         )
     elif tier == "important":
+        # An Important factor needs *some* Test Type (PQ not required);
+        # only a missing/N/A type is inconsistent.
+        if test_type not in _MISSING_TEST_TYPES:
+            return
         body = (
             "**Inconsistent combination — Critical-to-Quality vs Test Type**\n\n"
             f"An Important `Critical-to-Quality` factor still requires a Test Type "

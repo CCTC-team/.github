@@ -233,6 +233,17 @@ class TestTypeQualityConsistency:
         type_quality_consistency.check(_change("Test Type", "OQ", "PQ"), ctx, ev)
         assert ctx.actions.comments == []
 
+    def test_critical_with_present_non_pq_comments_requiring_pq(self):
+        # A present-but-non-PQ Test Type (e.g. OQ) does not satisfy a
+        # Critical factor: the check must still flag it, not just the N/A case.
+        ctx = _ctx(item_fields={"Critical-to-Quality": "Critical", "Test Type": "OQ"})
+        ev = StubEvidence()
+        type_quality_consistency.check(_change("Test Type", "PQ", "OQ"), ctx, ev)
+        assert len(ctx.actions.comments) == 1
+        _, _, body = ctx.actions.comments[0]
+        assert "PQ" in body
+        assert "OQ" in body
+
     def test_important_with_na_comments_requiring_test_type_not_pq(self):
         ctx = _ctx(item_fields={"Critical-to-Quality": "Important", "Test Type": "N/A"})
         ev = StubEvidence()
