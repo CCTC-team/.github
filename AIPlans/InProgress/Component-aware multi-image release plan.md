@@ -298,6 +298,38 @@ per-image). The heavy lift is the workflow loop and the schema/accessor/notes up
 
 ---
 
+## Post-implementation review fixes
+
+Two review agents scrutinised the change (workflow data-flow; cross-artifact
+consistency). Fixes applied:
+
+- [x] **CRITICAL — `fromJSON("")` on non-regulated repos.** When `applicable=false`
+  the `images` step never ran, so `needs.build.outputs.images` was `""` and the
+  `attest` matrix's `fromJSON(...)` (evaluated before the job `if:`) would error,
+  failing the workflow for a repo that should pass cleanly. Fixed: the `build` job
+  output now defaults to `'[]'` (`steps.images.outputs.json || '[]'`) and `attest`
+  guards `if: … && needs.build.outputs.images != '[]'`.
+- [x] **`attest` job missing `actions: read`** — `download-artifact@v4` needs it under
+  a restrictive default-token policy. Added.
+- [x] **`docker login` interpolated `${{ github.token }}` into the shell string** —
+  moved to an `env:` var (`echo "$GH_TOKEN" | …`), matching the file's stated
+  "never interpolate secrets/untrusted data into the shell" posture.
+- [x] **`run_target` swallowed `::endgroup::` on a failed build target** (step runs
+  under `set -e`) — now captures the exit code via `if ! …` and closes the group.
+- [x] **Stale single-image wording** the consistency reviewer found in spots missed on
+  the first pass: wiki `Release-Build-Contract.md` (canonical-target table rows + CI
+  prose), `Release-Process.md` intro, `Release-Multi-Repo.md` opening premise,
+  `Repository-Layout.md` `release.yml` row. All generalised to component image(s).
+- [x] **Test hardening:** added a living-fixture test that the shipped
+  `release-targets.yml.example` validates against the schema and declares both
+  components, and CLI tests for `--component-sbom` (list-style: empty + exit 0,
+  consistent with `--outputs`/`--list-components`). Suite now **64 passed**.
+- Reviewer note (no change): the example's target-level `sbom` `outputs` glob is a
+  single-image fallback; the comment now warns a multi-image repo must declare a
+  per-image `sbom` glob (both example components do).
+
+---
+
 ## Verification
 
 **Offline (this repo):**

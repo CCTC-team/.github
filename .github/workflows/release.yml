@@ -76,7 +76,10 @@ jobs:
       pull-requests: read
     outputs:
       applicable: ${{ steps.gate.outputs.applicable }}
-      images: ${{ steps.images.outputs.json }}
+      # Default to an empty JSON array when the images step did not run (e.g. a
+      # non-regulated repo), so the attest job's `fromJSON(...)` matrix never
+      # parses an empty string.
+      images: ${{ steps.images.outputs.json || '[]' }}
     env:
       TAG: ${{ inputs.tag }}
       ENFORCEMENT: ${{ inputs.enforcement }}
@@ -204,8 +207,12 @@ jobs:
             fi
             echo "::group::$name"
             echo "+ $cmd"
-            bash -c "$cmd"
+            # Capture the exit code so a failure still closes the log group
+            # (the step runs under `set -e`; `if` keeps it from aborting here).
+            local rc=0
+            if ! bash -c "$cmd"; then rc=$?; fi
             echo "::endgroup::"
+            return $rc
           }
           run_target build
           run_target package
@@ -435,10 +442,11 @@ jobs:
   # ---------------------------------------------------------------------------
   attest:
     needs: build
-    if: needs.build.outputs.applicable == 'true'
+    if: needs.build.outputs.applicable == 'true' && needs.build.outputs.images != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       id-token: write
       attestations: write
       packages: write
@@ -454,7 +462,9 @@ jobs:
           path: _release-state
 
       - name: Log in to GHCR
-        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2

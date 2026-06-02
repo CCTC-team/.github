@@ -120,6 +120,22 @@ class TestCli:
         )
         assert rc == 3
 
+    def test_component_sbom_cli_lists_globs(self, tmp_path, capsys):
+        rc = manifest._main(
+            ["--manifest", self._write(tmp_path), "--component-sbom", "trialview"]
+        )
+        assert rc == 0
+        assert capsys.readouterr().out.split() == ["bom/trialview.cdx.json"]
+
+    def test_component_sbom_cli_empty_for_component_without_globs(self, tmp_path, capsys):
+        # A list-style flag (like --outputs / --list-components): empty output,
+        # exit 0 — both "no globs declared" and an unknown name yield nothing.
+        rc = manifest._main(
+            ["--manifest", self._write(tmp_path), "--component-sbom", "trialview-api"]
+        )
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == ""
+
 
 class TestVersionPinEnv:
     def test_returns_declared_env(self):

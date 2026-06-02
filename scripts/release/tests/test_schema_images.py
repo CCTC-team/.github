@@ -15,10 +15,13 @@ from __future__ import annotations
 import json
 import os
 
+import yaml
 from jsonschema import Draft202012Validator
 
-SCHEMA_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "release-targets.schema.json"
+_REPO_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+SCHEMA_PATH = os.path.join(_REPO_ROOT, "release-targets.schema.json")
+EXAMPLE_PATH = os.path.join(
+    _REPO_ROOT, "templates", "compliance", "release-targets.yml.example"
 )
 
 
@@ -77,3 +80,19 @@ class TestImagesMap:
         m = _manifest(None)
         m["image"] = {"registry": "ghcr.io", "repository": "cctc-team/trialview", "digest_env": "D"}
         assert not _validator().is_valid(m)
+
+
+class TestShippedExample:
+    """The template stubbed into regulated repos must satisfy the schema."""
+
+    def test_example_manifest_validates(self):
+        with open(EXAMPLE_PATH) as f:
+            example = yaml.safe_load(f)
+        errors = sorted(_validator().iter_errors(example), key=lambda e: list(e.path))
+        assert errors == [], [f"{list(e.path)}: {e.message}" for e in errors]
+
+    def test_example_declares_multiple_component_images(self):
+        with open(EXAMPLE_PATH) as f:
+            example = yaml.safe_load(f)
+        # The worked example is TrialView: a Blazor host + an F# API.
+        assert set(example["images"]) == {"trialview", "trialview-api"}

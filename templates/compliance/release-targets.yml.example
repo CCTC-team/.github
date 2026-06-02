@@ -110,4 +110,8 @@ targets:
     # SBOM to its own image digest.
     run: ./build/sbom-all.sh   # TODO: emit one SBOM per image (e.g. one per Dockerfile/project)
     outputs:
-      - "artifacts/*.cdx.json"   # TODO: all per-image SBOMs (fallback for a single-image repo)
+      # All per-image SBOMs. NOTE: a multi-image repo MUST give each image its own
+      # `sbom:` glob above (as both components do here) — the workflow attests each
+      # image's own SBOM. This target-level `outputs` glob is only used as a
+      # fallback for a SINGLE-image repo; for >1 image it would be ambiguous.
+      - "artifacts/*.cdx.json"   # TODO
