@@ -211,11 +211,11 @@ and the validator runs on every PR. It checks:
 - README carries the banner marker
 - `last_reviewed` is within `review_cadence_months` (and not in the future)
 - `schema_version` is in the validator's supported set (controlled via
-  the `supported_schema_versions` input — currently `"1,2,3"`)
+  the `supported_schema_versions` input — currently `"1"`)
 
 ### Declaring the validated path scope
 
-Schema v2 adds two optional fields to `.compliance.yml`:
+`.compliance.yml` carries two optional fields for declaring path scope:
 
 ```yaml
 validated_paths:
@@ -236,10 +236,9 @@ Rationale and rules:
   (`src/` vs `lib/`, `tests/` vs `Feature Tests/`, etc.) — a central
   glob can't predict them all. The `.compliance.yml` is already QMS-
   controlled by the drift workflow, so it's the right home.
-- **Strict-mode default.** If `validated_paths` is omitted (e.g. an
-  older schema_version=1 file not yet migrated), the gate treats every
-  changed file as in-scope. The absence of a declaration never
-  silently relaxes the rule.
+- **Strict-mode default.** If `validated_paths` is omitted, the gate
+  treats every changed file as in-scope. The absence of a declaration
+  never silently relaxes the rule.
 - **`exempt_paths` is subtractive.** It only excludes files that
   *also* match `validated_paths`. Use sparingly — README and comment-
   only files in a validated directory are the common case. Document
@@ -255,12 +254,10 @@ Rationale and rules:
   reviewer; ensure CODEOWNERS in regulated repos covers
   `/.compliance.yml`.
 
-### CtQ-factor and QMS-document anchors (schema v3)
+### CtQ-factor and QMS-document anchors
 
-Schema v3 adds two fields that anchor the repo's controls to the trial's
-risk-based quality management, **required for `gcp-critical` from
-`schema_version: 3`** (a v2 `gcp-critical` file stays valid without them
-until it migrates):
+Two fields anchor the repo's controls to the trial's risk-based quality
+management, **required for `gcp-critical`**:
 
 ```yaml
 # Critical-to-Quality factors (CCTU/FRM129) this system safeguards.
@@ -346,9 +343,11 @@ behaviour, mirroring the rulesets' evaluate/active pattern:
 
 ### Schema evolution
 
+The schema is currently at its initial **version 1**, which already
+carries every field (including `ctq_factors` / `governing_documents`).
 `schema_version` is an integer (not pinned to a constant) so the schema
-can evolve without instantly breaking every existing `.compliance.yml`.
-The migration ritual for a breaking change:
+can still evolve later without instantly breaking every existing
+`.compliance.yml`. The migration ritual for a future breaking change:
 
 1. Bump `schema_version` in `compliance.schema.json` and add the new
    version to the validator's `supported_schema_versions` default
@@ -358,21 +357,6 @@ The migration ritual for a breaking change:
    the team's pace.
 4. Once every repo is migrated, drop the old version from
    `supported_schema_versions` to retire it.
-
-The **v2 → v3** change (adding `ctq_factors` + `governing_documents`,
-required for `gcp-critical`) is a worked example of this ritual:
-
-1. The schema bumps to v3 and `supported_schema_versions` becomes
-   `"1,2,3"` — this must merge **before** any repo declares
-   `schema_version: 3`, or that repo would fail the "schema_version
-   supported" check. The v3 conditional is gated on
-   `schema_version >= 3`, so existing v2 `gcp-critical` files stay valid
-   without the new fields until they deliberately migrate.
-2. Drift pushes the new schema into every regulated repo.
-3. Per-repo PRs bump each `.compliance.yml` to v3 and add its
-   `ctq_factors` / `governing_documents`, at the team's pace.
-4. When every `gcp-critical` repo is on v3, `"1,2"` can be retired from
-   `supported_schema_versions`.
 
 ### How drift correction runs
 

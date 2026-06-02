@@ -10,7 +10,7 @@ name: GxP traceability gate (reusable)
 #   2. regulatory_tier != none. If "none", exits success.
 #   3. Compute "in-scope changes" = PR's changed files matching
 #      validated_paths minus exempt_paths. If validated_paths is absent
-#      (older schema_version=1 file), falls back to strict mode where
+#      (it is optional), falls back to strict mode where
 #      every changed file counts as in-scope.
 #   4. If no in-scope changes: exits success (the PR touches no
 #      validated artefacts).

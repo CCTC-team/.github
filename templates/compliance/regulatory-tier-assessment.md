@@ -162,8 +162,8 @@ Tick each before the QA reviewer signs.
       and inspector-readiness values match what's in `.compliance.yml`.
 - [ ] If `regulatory_tier` = `gcp-critical`, the schema's
       conditional `allOf` requirements are satisfied (GAMP ∈ {4, 5},
-      all five inspector-readiness fields present; and on
-      `schema_version` 3, `ctq_factors` and `governing_documents` too).
+      all five inspector-readiness fields present; plus
+      `ctq_factors` and `governing_documents`).
 - [ ] If GAMP = 5 or `regulatory_tier` = `gcp-critical`, the
       `csv_evidence` link resolves and the pack covers URS / FS /
       IQ / OQ / PQ + risk assessment.

@@ -34,7 +34,7 @@ on:
       supported_schema_versions:
         description: "Comma-separated list of schema_version values this validator accepts."
         type: string
-        default: "1,2,3"
+        default: "1"
 
 jobs:
   validate:

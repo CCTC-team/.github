@@ -6,7 +6,7 @@
 # merging — the stub assumes a UK academic CTU EDC posture (gcp-critical,
 # GAMP 5, no FDA/EMA submission, no EU sites, no clinical decisions).
 
-schema_version: 3
+schema_version: 1
 
 # Must match the `regulatory_tier` org custom property set on this repo.
 # - gcp-critical     — captures, transforms, or validates trial data
