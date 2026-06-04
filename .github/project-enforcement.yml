@@ -19,8 +19,8 @@
 
 projects:
   - owner: CCTC-team
-    number: 31
-    name: "[TEST] Regulated Feature Lifecycle"
+    number: 34
+    name: "TrialView lifecycle board"
 
 checks:
   transition: evaluate
