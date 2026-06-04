@@ -197,6 +197,13 @@ jobs:
       # <APP>_IMAGE_DIGEST=sha256:..., <APP>_API_IMAGE_DIGEST=sha256:...).
       - name: Build, package, and publish the images
         if: steps.gate.outputs.applicable == 'true'
+        # Expose the workflow token so a repo's build commands can authenticate to
+        # private dependency feeds and push images to GHCR. It is passed as an env
+        # var (never interpolated into a shell string) per this file's posture; the
+        # `packages: write` permission above scopes the GHCR push.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           run_target() {
             local name="$1"
