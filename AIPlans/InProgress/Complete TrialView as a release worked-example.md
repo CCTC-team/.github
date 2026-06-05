@@ -63,18 +63,34 @@
    grype genuinely ran (DB loaded) and found no critical/high. This upgrades the
    earlier rc7/rc8 result from "inferred clean" to **positively proven clean**.
 
-   **State:** remediation is on `rh_dev` via PR #19 → `develop` (not yet merged),
-   so dependabot will not auto-close the repo-manifest alerts until it lands. All
-   `v0.0.1-rc*` dry-run tags and their draft Releases have been cleaned up — the
-   repo carries no `v0.0.1*` tag or Release, leaving the name clear for the real
-   `v0.0.1`.
+   **State:** remediation is on `rh_dev` via PR #19 → `develop` (still **OPEN**,
+   confirmed 2026-06-05), so dependabot will not auto-close the repo-manifest
+   alerts until it lands. All `v0.0.1-rc*` dry-run tags and their draft Releases
+   have been cleaned up — the repo carries no `v0.0.1*` tag or Release, leaving
+   the name clear for the real `v0.0.1`.
 
-2. **Production Environment + required reviewers.** TrialView has **no
-   Environments** configured. Create a `production` Environment with the
-   QA-approver group as required reviewers, restrict deployment branches/tags to
-   `v*`, and set the release author ≠ approver (segregation of duties) — per
-   `docs/release-authorisation.md`. Then set `environment: production` in
-   TrialView's release caller.
+2. **ChatOps release authorisation (`qa-approvers` `/approve`).**
+   *Supersedes the original "production Environment + required reviewers" step:
+   GitHub Environment deployment-protection rules are Enterprise-only for private
+   repos and the org is on Team, so that gate could never render. It was replaced
+   by an event-driven ChatOps `/approve` gate, now implemented — see
+   `AIPlans/Complete/Team-compatible release authorisation gate plan.md`.* In
+   `active` the release cuts a **draft** and opens a digest-bound authorisation
+   issue; a `qa-approvers` member who is **not** the release author publishes it
+   by commenting `/approve` (author ≠ approver = segregation of duties, ICH
+   E6(R3) §3.16). Setup per `docs/trialview-go-live-runbook.md` §A: grant
+   `qa-approvers` **Read** on TrialView; provision the org secret
+   `QA_ORG_READ_TOKEN` (`read:org`) and grant TrialView access; ensure the
+   `release-authorize.yml` caller is present (stubbed by compliance-drift); set
+   `approvers_team: qa-approvers` in TrialView's release caller.
+
+   **State (2026-06-05): not started in TrialView.** Verified: `qa-approvers`
+   has no Read on the repo; the `QA_ORG_READ_TOKEN` org secret does not exist;
+   the `release-authorize.yml` caller is absent (the `compliance-drift` workflow
+   is not yet present in TrialView, so nothing has stubbed it); and TrialView's
+   `release.yml` caller still carries the old commented `# environment:
+   production` line — it has **not** been updated to `approvers_team:`. Owner:
+   org admin (the token value cannot be minted by this automation).
 
 3. **Pull-agent on staging (needs server access — ops).** The agent code is
    built + tested but not deployed. Per `server-structure/agent/PREREQUISITES.md`:
@@ -86,9 +102,11 @@
 
 4. **Flip publish to active + cut `v0.0.1`.** After 1–3: change TrialView's caller
    `enforcement: evaluate → active`, cut a **signed** `v0.0.1` tag (`git tag -s`),
-   and confirm a **published** (non-draft) Release gated on the production
-   Environment approval, carrying the signed manifest + validation evidence.
-   Update the release rollout log rows.
+   and confirm the release is cut as a **draft** that publishes only after a
+   non-author `qa-approvers` member comments `/approve` on the authorisation
+   issue (gate 2), the published Release carrying the signed manifest + validation
+   evidence and the stamped `## Release authorisation` block. Update the release
+   rollout log rows.
 
 5. **Board `Released` gate.** With a published Release (#4) AND a verified staging
    deploy (#3) both done, the hardened `Released` precondition's gate is real:
@@ -100,10 +118,10 @@
 
 **Exact runbooks for gates 2 + 3** (the human-owned steps): written up
 copy-pasteable in [`docs/trialview-go-live-runbook.md`](../../docs/trialview-go-live-runbook.md)
-— §A covers the `production` Environment (the standing `qa-approvers` team, now
+— §A covers the ChatOps authorisation gate (the standing `qa-approvers` team, now
 created, granted **Read** on the repo — never Write, for segregation of duties;
-the Environment with `prevent_self_review` + `v*` tag policy; the caller
-`environment:` edit); §B covers the staging agent install over `PREREQUISITES.md`
+the `QA_ORG_READ_TOKEN` org-read secret; the `release-authorize` caller; the
+caller `approvers_team:` edit); §B covers the staging agent install over `PREREQUISITES.md`
 + `DEPLOYMENT_RUNBOOK.md` with the TrialView two-image specifics and the verified
 pull-deploy check. The QA-approver-team **Read** grant is a standing onboarding
 control for every regulated repo — captured in `docs/release-authorisation.md`
@@ -121,5 +139,6 @@ until they close. Issue #13 ("migrate `.compliance.yml` to schema v2") looks
 
 - Me/agentable: #1 investigation + fixes, #4 caller flip + tag, #5 config flips,
   exact steps for #2.
-- You / org admin: #2 (Environment + reviewers in the GitHub UI).
+- You / org admin: #2 (grant `qa-approvers` Read, provision + grant the
+  `QA_ORG_READ_TOKEN` secret; the token value cannot be minted by automation).
 - Ops / server access: #3 (agent install on the staging host).
