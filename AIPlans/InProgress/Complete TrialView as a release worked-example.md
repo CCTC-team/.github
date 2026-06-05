@@ -1,20 +1,62 @@
 # Complete TrialView as a release worked-example
 
-> Top-level = not started. Picks up after `AIPlans/Complete/Replace attestation
-> with signed release manifest.md`. The org release pipeline (signed-manifest
-> model) is implemented and **dry-run validated**; TrialView builds, signs the
-> manifest, and cuts a **draft** Release in `evaluate` mode. This plan walks the
-> repo's own rollout-log gates (`README.md` §"Release pipeline rollout log" and
-> §"Active-mode rollout log") to a real **published, gated, agent-deployed**
-> release that backs a board card reaching `Released`.
+> **In progress.** Picks up after `AIPlans/Complete/Replace attestation with
+> signed release manifest.md`. The org release pipeline (signed-manifest model)
+> is implemented and **dry-run validated**; TrialView builds, signs the manifest,
+> and cuts a **draft** Release in `evaluate` mode. This plan walks the repo's own
+> rollout-log gates (`README.md` §"Release pipeline rollout log" and §"Active-mode
+> rollout log") to a real **published, gated, agent-deployed** release that backs
+> a board card reaching `Released`.
 
-## State at handoff (2026-06-05)
+## COLD-START — resume here (verified 2026-06-05 EOD)
 
-- `.github` / `server-structure` / `.github.wiki` all clean and pushed.
-- Org secret `RELEASE_SIGNING_KEY` set (selected → TrialView); public key in
-  `server-structure/agent/allowed_signers`; sign/verify proven end-to-end on the
-  real `v0.0.1-rc7` artifact (since cleaned up — no `v0.0.1*` tags remain).
-- TrialView caller is in `enforcement: evaluate`.
+**Read this first, then jump to "## Remaining work" at the bottom.** Three repos
+are involved, all cloned under `~/repos/`: `.github` (this repo; work on `main`),
+`TrialView` (the regulated app; default branch `develop`, signed commits),
+`server-structure` (the deploy/agent repo). `.github` + `.github.wiki` are clean
+and pushed.
+
+Gate status as verified today:
+
+- **Gate 1 (vuln) — ✅ COMPLETE.** PR #19 merged to TrialView `develop`
+  (`1bcf690`); **0 critical / 0 high** open alerts (1 low + 2 medium remain,
+  time-boxed in `functional_scripts/SECURITY-triage.md`).
+- **Gate 2 (§A ChatOps authorisation) — ✅ COMPLETE.** `qa-approvers` has Read on
+  TrialView; `QA_ORG_READ_TOKEN` org secret provisioned (machine-account
+  fine-grained PAT, Members:read, scoped to TrialView); `release-authorize.yml`
+  caller + `approvers_team: qa-approvers` landed on TrialView `develop`
+  (`f756c9c`). Caller still `enforcement: evaluate`.
+- **Gate 3 (§B staging agent) — ❌ BLOCKED (see finding below).** Not just an ops
+  install: the staging compose still `build:`s from source, so the agent's digest
+  pin is ignored. Must be cut over to `image: …@${DIGEST}` first, and that wants a
+  published `v0.0.1` to pin against — so §B's verified deploy now sits **after**
+  gate 4, not parallel to §A.
+- **Gate 4 (active flip + `v0.0.1`) — ❌ NOT STARTED.** No `v0.0.1*` tag/Release;
+  caller is `evaluate`. This is the next agentable unblock (needs your go-ahead —
+  it publishes a real production Release).
+- **Gate 5 (board `Released`) — ❌ NOT STARTED.** Gated on #4 + #3.
+
+Standing facts: org secret `RELEASE_SIGNING_KEY` set (selected → TrialView),
+public key in `server-structure/agent/allowed_signers`, sign/verify proven
+end-to-end on the (since-cleaned-up) `v0.0.1-rc7..rc9` dry-runs. `gh` is
+authenticated as `rmh54` with an `admin:org` token.
+
+### 🔑 KEY FINDING TODAY — staging compose is not digest-pinned (blocks §B)
+
+The agent binding in `server-structure/agent/config.staging.yml` is **correct**
+(both images `trialview` + `trialview-api`; component keys, GHCR repos,
+`digest_env` vars, and `compose_service` names all match
+`TrialView/.github/release-targets.yml`). **But** the compose file it points at
+(`server-structure/trialview/docker-compose.staging.yml`) uses `build:` (rebuild
+from `/srv/builds/staging/TrialView`) for both services — there is **no `image:
+…@${TRIALVIEW_IMAGE_DIGEST}`**. The agent writes the digest into `.env`
+(`agent/agent.py:193`) then `docker compose up -d --no-deps`
+(`agent/agent.py:213`), but nothing consumes the var → the digest pin is silently
+ignored and the server rebuilds from local source, defeating verified-pull-by-
+digest. Fix = the compose cutover already specced as **Phase 6** of
+`server-structure/AIPlans/InProgress/TrialView pull-agent release deployment
+plan.md` (all Phase 6 items unchecked); Phase 6a pre-flight needs a real
+published two-image Release to pin. Hence the re-ordering noted above.
 
 ## Gates remaining (dependency order)
 
@@ -99,13 +141,20 @@
    (approvers_team has no effect until the gate-4 active flip). Verified present on
    `origin/develop`.
 
-3. **Pull-agent on staging (needs server access — ops).** The agent code is
-   built + tested but not deployed. Per `server-structure/agent/PREREQUISITES.md`:
-   docker + compose v2, `gh` + `ssh-keygen`, the GHCR-read token at
-   `/srv/secrets/cctc-release-agent/staging.env`, the agent + `config.staging.yml`
-   + `allowed_signers` deployed to `/srv/docker/agent`, systemd unit/timer. Do
-   **one verified pull-deploy on staging** (agent verifies the signed manifest,
-   pulls by digest, boots, audits).
+3. **Pull-agent on staging (needs server access — ops) — ⚠ also needs a code
+   change first.** The agent code is built + tested but not deployed. Per
+   `server-structure/agent/PREREQUISITES.md`: docker + compose v2, `gh` +
+   `ssh-keygen`, the GHCR-read token at `/srv/secrets/cctc-release-agent/
+   staging.env`, the agent + `config.staging.yml` + `allowed_signers` deployed to
+   `/srv/docker/agent`, systemd unit/timer. Do **one verified pull-deploy on
+   staging** (agent verifies the signed manifest, pulls by digest, boots, audits).
+
+   **⚠ BLOCKER (found 2026-06-05):** the staging compose still `build:`s from
+   source, so the agent's digest pin is ignored (see "KEY FINDING" at the top).
+   The compose cutover (`server-structure` plan **Phase 6b/6c**) must land first,
+   and its pre-flight (6a) needs a published `v0.0.1` to pin — so the **verified
+   pull-deploy can only happen after gate 4**. The agent *install* (B1/B2) can be
+   done anytime; only the verified deploy (B3) is gated.
 
 4. **Flip publish to active + cut `v0.0.1`.** After 1–3: change TrialView's caller
    `enforcement: evaluate → active`, cut a **signed** `v0.0.1` tag (`git tag -s`),
@@ -144,8 +193,84 @@ until they close. Issue #13 ("migrate `.compliance.yml` to schema v2") looks
 
 ## Owners
 
-- Me/agentable: #1 investigation + fixes, #4 caller flip + tag, #5 config flips,
-  exact steps for #2.
-- You / org admin: #2 (grant `qa-approvers` Read, provision + grant the
-  `QA_ORG_READ_TOKEN` secret; the token value cannot be minted by automation).
-- Ops / server access: #3 (agent install on the staging host).
+- Me/agentable: #1 (done), #2 A0/A2/A3 (done), #4 caller flip + tag, the Phase 6
+  compose cutover in `server-structure`, #5 config flips.
+- You / org admin: #2 A1 (done — secret provisioned); the `/approve` itself at
+  go-live must come from a `qa-approvers` member who is **not** whoever cuts the
+  `v0.0.1` tag (author ≠ approver).
+- Ops / server access: #3 agent install + the verified pull-deploy on staging.
+
+## Remaining work — implementation plan (resume here)
+
+Ordered by true dependency (the original "§A ∥ §B before v0.0.1" ordering is
+**corrected**: §B's verified deploy now follows gate 4 because of the compose
+cutover finding). Gates 1 + 2 are done. Tackle the phases below in order.
+
+### Phase A — Gate 4: active flip + first published `v0.0.1` (agentable; needs go-ahead)
+
+> Outward-facing: this publishes a **real production Release**. Confirm before the
+> tag push and again before the `/approve`. Needs a second `qa-approvers` member
+> who is not the tag-pusher.
+
+- [ ] **A1. Pre-flight dry-run (optional but recommended).** Push a throwaway
+  `v0.0.1-rcN` tag with `enforcement: active` + `approvers_team: qa-approvers`
+  already set; confirm the build cuts a **draft** Release and opens a digest-bound
+  authorisation issue carrying both component digests. Then exercise the ChatOps
+  paths (approve by non-author → publishes + stamps notes + closes issue; SoD:
+  author `/approve` refused; `/deny`; non-member `/approve` ignored). Clean up the
+  rcN tag/release/issue. (These are the unchecked verification items at the bottom
+  of `AIPlans/Complete/Team-compatible release authorisation gate plan.md`.)
+- [ ] **A2. Flip caller to active.** In TrialView `.github/workflows/release.yml`
+  set `enforcement: evaluate → active` (commit signed to `develop`).
+  `approvers_team: qa-approvers` is already set.
+- [ ] **A3. Cut the signed tag.** `git tag -s v0.0.1 -m '…'` on the release commit
+  and push. Build cuts a **draft** Release (full evidence + signed manifest) and
+  opens the authorisation issue.
+- [ ] **A4. Authorise.** A `qa-approvers` member who is **not** the tag-pusher
+  comments `/approve` on the issue → draft publishes, notes carry the `## Release
+  authorisation` block (approver, UTC, digests), issue closes.
+- [ ] **A5. Record.** Update the `README.md` release rollout-log + active-mode
+  rows; capture the published digests for Phase B.
+
+### Phase B — Gate 3 / §B: compose cutover + staging deploy
+
+- [ ] **B1. Compose cutover (agentable — `server-structure`).** Execute Phase
+  6b/6c of `server-structure/AIPlans/InProgress/TrialView pull-agent release
+  deployment plan.md`: replace the `build:` stanza of `trialview-staging` and
+  `trialview-api-staging` (and the prod services) with `image:
+  ghcr.io/cctc-team/trialview@${TRIALVIEW_IMAGE_DIGEST}` /
+  `…/trialview-api@${TRIALVIEW_API_IMAGE_DIGEST}`, preserving secrets, the external
+  `server-network`, `depends_on`, healthchecks. Pre-flight (6a) confirms the
+  `v0.0.1` digests from Phase A exist. Staging first, then prod after a clean
+  staging cycle.
+- [ ] **B2. Agent install on staging (ops — server shell).** Work
+  `server-structure/agent/PREREQUISITES.md` then DEPLOYMENT_RUNBOOK.md "Install
+  the agent"; enable the systemd timer. Runbook §B in
+  `docs/trialview-go-live-runbook.md`.
+- [ ] **B3. One verified pull-deploy (ops).** Agent verifies the signed manifest
+  against `allowed_signers`, pulls **both** images by digest, boots, audits;
+  confirm a tampered manifest fails closed. Both `trialview-staging` +
+  `trialview-api-staging` up on the pinned digests.
+
+### Phase C — Gate 5: board `Released` + activate board checks (agentable; needs go-ahead)
+
+- [ ] **C1.** Drive a board card (board #34) through the lifecycle to `Released`
+  backed by the published `v0.0.1` Release.
+- [ ] **C2.** Flip `preconditions: Released` (and the remaining board checks per
+  the active-mode rollout log) `evaluate → active` in
+  `.github/project-enforcement.yml`; optionally enable `require_signed_manifest`.
+  Record dates in the rollout logs.
+
+### Documentation / sync (do alongside the phase that changes behaviour)
+
+- [ ] Update `README.md` rollout-log rows (Phase A5, C2) and reconcile the wiki
+  (`Release-Process.md`, `Onboarding-a-Regulated-Repo.md`) per CLAUDE.md "keep the
+  wiki in sync".
+- [ ] When `server-structure` Phase 6 lands, tick its checkboxes there too (that
+  plan is the source of truth for the compose cutover).
+
+### First move on cold-start
+
+Decide whether to do **Phase A1 (dry-run)** first or go straight to the real
+`v0.0.1`. Everything in Phase A is outward-facing — confirm before the tag push
+and before the `/approve`.
