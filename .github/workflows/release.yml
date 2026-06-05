@@ -451,9 +451,17 @@ jobs:
         run: echo "Release workflow not applicable to this repo (no .compliance.yml or regulatory_tier=none)."
 
   # ---------------------------------------------------------------------------
-  # Attest each image independently: keyless, OIDC-bound, transparency-logged
-  # provenance + SBOM over the image DIGEST. One matrix leg per image — an image
-  # built by anything other than this workflow fails the agent's verification.
+  # Attest each image independently: keyless, OIDC-bound provenance + SBOM over
+  # the image DIGEST. One matrix leg per image — an image built by anything other
+  # than this workflow fails the agent's verification.
+  #
+  # Persisting an attestation for a PRIVATE repo requires GitHub Enterprise Cloud
+  # (Team/Pro/Free cover public repos only). On a non-GHEC org the attest step
+  # fails with "Feature not available for the organization". In `evaluate` mode
+  # that is tolerated (warn, don't fail) so the rollout can still cut a draft and
+  # exercise the rest of the pipeline; in `active` mode it is fatal — no
+  # provenance, no published release, because the pull-agent refuses to deploy an
+  # unattested digest. See docs/release-process.md.
   # ---------------------------------------------------------------------------
   attest:
     needs: build
@@ -481,7 +489,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      # continue-on-error in non-active modes: a failed persist (e.g. a non-GHEC
+      # org) is tolerated for the dry-run but stays fatal for an active release.
       - name: Attest build provenance
+        id: provenance
+        continue-on-error: ${{ inputs.enforcement != 'active' }}
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ matrix.component.ref }}
@@ -489,12 +501,21 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
+        id: sbom
+        continue-on-error: ${{ inputs.enforcement != 'active' }}
         uses: actions/attest-sbom@v2
         with:
           subject-name: ${{ matrix.component.ref }}
           subject-digest: ${{ matrix.component.digest }}
           sbom-path: _release-state/assets/${{ matrix.component.sbom }}
           push-to-registry: true
+
+      # Make a tolerated failure loud rather than silent: an evaluate run that
+      # could not persist provenance is NOT a clean release candidate.
+      - name: Flag unattested image (evaluate mode)
+        if: always() && inputs.enforcement != 'active' && (steps.provenance.outcome != 'success' || steps.sbom.outcome != 'success')
+        run: |
+          echo "::warning::[evaluate] Could not persist attestation for ${{ matrix.component.name }} (provenance=${{ steps.provenance.outcome }}, sbom=${{ steps.sbom.outcome }}). Private-repo attestations require GitHub Enterprise Cloud; tolerated here but an ACTIVE release would fail and the pull-agent would refuse this digest. See docs/release-process.md."
 
   # ---------------------------------------------------------------------------
   # Optional approval gate. Instantiated ONLY when an `environment` is configured;

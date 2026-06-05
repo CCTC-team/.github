@@ -87,7 +87,7 @@ as Release assets.
 | Artifact | What it is | Clause it answers |
 | --- | --- | --- |
 | **Image digest(s)** (`ghcr.io/…@sha256:…`, one per component) | The exact, immutable artifact(s) that run | ICH E6(R3) §4.3.4 (validated state is the thing deployed); ALCOA+ *Original* |
-| **Build provenance attestation** (per image) | Keyless, OIDC-bound, transparency-logged proof each image was built by the release workflow | ICH E6(R3) §4.3.5 (controlled release); ALCOA+ *Attributable* |
+| **Build provenance attestation** (per image) | Keyless, OIDC-bound proof each image was built by the release workflow (a private repo uses GitHub's Sigstore instance — no public transparency log) | ICH E6(R3) §4.3.5 (controlled release); ALCOA+ *Attributable* |
 | **SBOM + its attestation** (per image) | CycloneDX bill of materials, signed, one per image | Cyber Essentials / supply-chain; dependency vulnerability posture |
 | **Validation report** | CtQ → URS → V&V → acceptance → QA summary for the milestone | ICH E6(R3) §4.3.4 (validation evidence) |
 | **CtQ traceability matrix** | CtQ factor (FRM129) → Risk → Requirement → `.feature` → acceptance/QA approver | ICH E6(R3) Principle 6 (CtQ); ALCOA+ *Complete* |
@@ -99,6 +99,17 @@ the validation report, SBOM, checksums, notes and authorisation block are on the
 **GitHub Release**; the formal re-authenticated e-signature of record is in the
 application's signature flow or the CTU QMS/eTMF (see
 [release-authorisation.md](release-authorisation.md)).
+
+> **Prerequisite — GitHub Enterprise Cloud for private-repo attestations.**
+> Persisting the build-provenance and SBOM attestations for a **private** repo
+> requires **GitHub Enterprise Cloud**; Free/Pro/Team cover public repos only. On
+> a non-GHEC org the attest step fails with *"Feature not available for the
+> organization"*. The reusable workflow therefore **tolerates** an unpersisted
+> attestation in `evaluate` mode (it warns and still cuts the draft, so the rest
+> of the pipeline can be exercised) but treats it as **fatal in `active`** —
+> without provenance the pull-agent refuses to deploy the digest. Until the org
+> is on GHEC, regulated repos can run dry-run drafts but **cannot publish an
+> attested production Release**.
 
 ## Conventions
 
