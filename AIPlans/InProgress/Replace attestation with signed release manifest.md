@@ -27,7 +27,7 @@ secret; this plan scaffolds everything that uses it.
 Signing namespace: `cctc-release`. Signer principal: `release@cctc-team` (the
 identity recorded in `allowed_signers`).
 
-## Phase 1 — Producer (CCTC-team/.github)  ⬜
+## Phase 1 — Producer (CCTC-team/.github)  ✅ (.github 0eafefc · TrialView 290f64c5)
 
 `release.yml` (reusable):
 - Delete the `attest` matrix job and the evaluate-tolerance / "Flag unattested
