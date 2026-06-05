@@ -38,12 +38,29 @@
    need a breaking major upgrade) — time-boxed in
    `functional_scripts/SECURITY-triage.md` (review by 2026-09-05). Test harness
    re-verified (cucumber `--dry-run`: 36 scenarios / 149 steps load).
-   **Still TODO before active:** confirm the grype **image** scan itself is clean
-   in a dry-run (it scans image SBOMs, not repo manifests — could still flag base
-   `aspnet:10.0` OS CVEs or NuGet deps, which are a separate question from these
-   alerts). Local grype install is sandbox-blocked; get the result from a CI
-   dry-run's job summary. The `rh_dev` branch is **not yet pushed/merged**, so
-   dependabot will not auto-close the alerts until it lands on `develop`.
+   **Grype image scan — confirmed clean by dry-run.** Pushed signed tag
+   `v0.0.1-rc8` (TrialView run 27020450194, evaluate mode → draft Release). The
+   active-mode vuln gate (`scripts/release/sbom_scan.py`, blocks on any
+   critical/high in an image SBOM) reported **no blocking findings**: the
+   evaluate-mode "Critical/High present — would fail in active mode" warning did
+   **not** fire in execution (the build job log carries the string only once, as
+   the echoed step script, not as an emitted annotation). So the grype gate would
+   pass in `active` on the current images. Same result on rc7 (image is unchanged
+   by the test-dep fixes).
+
+   **Robustness caveat (follow-up, not a blocker):** `summarize()` tallies
+   `grype["matches"]`; if grype ever fails to fetch its vuln DB its output is
+   empty and the gate reads `total=0` → "✅ No known vulnerabilities" →
+   `has_blocking=False` — i.e. a scanner failure is indistinguishable from a
+   genuine clean. For a regulated gate, harden the workflow to assert grype
+   actually ran (check its exit code / DB-update status, or treat a 0-total scan
+   of a multi-thousand-component image as suspect). Tracked here as a
+   recommended improvement to the org release workflow.
+
+   **State:** remediation is on `rh_dev` via PR #19 → `develop` (not yet merged),
+   so dependabot will not auto-close the repo-manifest alerts until it lands. The
+   `v0.0.1-rc8` dry-run tag + its draft Release remain and should be cleaned up
+   (like the earlier rc tags) before cutting the real `v0.0.1`.
 
 2. **Production Environment + required reviewers.** TrialView has **no
    Environments** configured. Create a `production` Environment with the
