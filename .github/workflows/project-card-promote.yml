@@ -75,6 +75,7 @@ jobs:
         id: guard
         env:
           PROJECT_NUMBER: ${{ inputs.project_number }}
+          APP_CLIENT_ID: ${{ secrets.app_client_id }}
         run: |
           if [ -z "$PROJECT_NUMBER" ] || [ "$PROJECT_NUMBER" = "0" ]; then
             {
@@ -85,6 +86,13 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          # `secrets` cannot be referenced in a step `if:`, so surface whether the
+          # App credentials are present as an output the later steps can gate on.
+          if [ -n "$APP_CLIENT_ID" ]; then
+            echo "has_app_creds=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_app_creds=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout .github
@@ -109,7 +117,7 @@ jobs:
       # absent we fall back to github.token, which will fail at the
       # mutation step (and the run will surface that clearly).
       - name: Generate app token
-        if: steps.guard.outputs.skip != 'true' && secrets.app_client_id != ''
+        if: steps.guard.outputs.skip != 'true' && steps.guard.outputs.has_app_creds == 'true'
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
