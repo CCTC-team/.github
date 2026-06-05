@@ -24,6 +24,27 @@
    documented, time-boxed triage for any that cannot be fixed. Re-run a dry-run
    and confirm grype is clean (or only warns) before flipping active.
 
+   **Status (2026-06-05): dependabot critical/high remediated on `rh_dev`
+   (TrialView commit `6e2e487`).** Key finding: every critical/high alert lived
+   in `functional_scripts/` npm **test tooling** (handlebars, minimatch, lodash,
+   glob, braces, cross-spawn, picomatch, tmp, flatted) and one Java **test**
+   dep (`assertj-core`) — none is in either deployed image. Confirmed by
+   grepping the rc7 image SBOMs (`trialview.cdx.json` / `trialview-api.cdx.json`,
+   ~4100 components each): **zero** occurrences of any alerted package. Both
+   images are `dotnet publish` output only. Remediation: bumped
+   `@typescript-eslint/{eslint-plugin,parser}` 7.2.0→7.18.0 + lockfile resolution
+   (clears all npm critical/high without breaking changes); `assertj-core`
+   3.22.0→3.27.7. 8 **moderate** remain (uuid via Cucumber/allure report tooling,
+   need a breaking major upgrade) — time-boxed in
+   `functional_scripts/SECURITY-triage.md` (review by 2026-09-05). Test harness
+   re-verified (cucumber `--dry-run`: 36 scenarios / 149 steps load).
+   **Still TODO before active:** confirm the grype **image** scan itself is clean
+   in a dry-run (it scans image SBOMs, not repo manifests — could still flag base
+   `aspnet:10.0` OS CVEs or NuGet deps, which are a separate question from these
+   alerts). Local grype install is sandbox-blocked; get the result from a CI
+   dry-run's job summary. The `rh_dev` branch is **not yet pushed/merged**, so
+   dependabot will not auto-close the alerts until it lands on `develop`.
+
 2. **Production Environment + required reviewers.** TrialView has **no
    Environments** configured. Create a `production` Environment with the
    QA-approver group as required reviewers, restrict deployment branches/tags to
@@ -52,6 +73,15 @@
    per the active-mode rollout log) `evaluate → active` in
    `.github/project-enforcement.yml`. Optionally enable
    `require_signed_manifest` so the gate also requires `release-manifest.json.sig`.
+
+**Exact runbooks for gates 2 + 3** (the human-owned steps): written up
+copy-pasteable in [`docs/trialview-go-live-runbook.md`](../../docs/trialview-go-live-runbook.md)
+— §A covers the `production` Environment (incl. the open decision that **no
+QA-approver team exists yet**, the `gh api` to create it + the Environment with
+`prevent_self_review` + `v*` tag policy, and the caller `environment:` edit); §B
+covers the staging agent install over `PREREQUISITES.md` +
+`DEPLOYMENT_RUNBOOK.md` with the TrialView two-image specifics and the verified
+pull-deploy check.
 
 ## Parallel / separate track — TrialView GxP gaps (NOT pipeline blockers)
 
