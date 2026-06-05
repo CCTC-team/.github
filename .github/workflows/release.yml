@@ -384,7 +384,7 @@ jobs:
               shutil.copy(img["sbom_src"], os.path.join(state, "assets", img["sbom"]))
           PY
           # The release manifest: the signed source of truth for what the agent
-          # deploys (tag -> per-component digest) plus the build-provenance fields
+          # deploys (tag -> per-component digest) plus the commit / run-id
           # it records. Written here (data only — no signing key in the build job)
           # so it is covered by SHA256SUMS; the release job signs it.
           COMMIT="$GITHUB_SHA" RUN_ID="$GITHUB_RUN_ID" \

@@ -53,7 +53,7 @@ class ReleaseMeta:
     sha: str
     url: str = ""
     has_validation_asset: bool = False
-    has_provenance: bool = False
+    has_signed_manifest: bool = False
 
 
 # An attached asset is the release's validation report if its filename looks
@@ -61,6 +61,11 @@ class ReleaseMeta:
 # this pattern is deliberately loose so "validation-report.md",
 # "validation_report.pdf", "trialview-validation-report-1.4.0.md" all match.
 _VALIDATION_ASSET_RE = re.compile(r"validation[\s._-]*report", re.I)
+
+# The detached signature over the signed release manifest. The release workflow
+# attaches it with this exact name (see CCTC-team/.github release.yml); its
+# presence is the board-side evidence that the release was signed.
+_SIGNED_MANIFEST_ASSET = "release-manifest.json.sig"
 
 
 def _select_published_release(releases, tag_to_sha, sha):
@@ -86,6 +91,7 @@ def _select_published_release(releases, tag_to_sha, sha):
             sha=sha,
             url=rel.get("html_url") or "",
             has_validation_asset=has_validation,
+            has_signed_manifest=_SIGNED_MANIFEST_ASSET in assets,
         )
     return None
 

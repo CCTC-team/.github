@@ -124,16 +124,16 @@ mechanics:
   trace every requirement in the milestone from its CtQ factor down — an
   issue with no milestone is invisible to that matrix.
 - **A Release is a published, evidenced artifact — not a tag.** Cutting a
-  release builds and signs a container image in CI, pushes it to GHCR by
-  immutable digest, attaches the validation report, SBOM, checksums and the
-  CtQ traceability matrix, and records who authorised it. The server then
-  *pulls* that verified image; nothing pushes into production.
-- **A release cannot publish without a green validation report and a
-  verified image attestation.** The release workflow fails if the
-  `validation-docs` target produces no report, and the on-server agent
-  **refuses to deploy** any image whose provenance attestation does not
-  verify against the release workflow's identity. "It built" is not "it
-  released".
+  release builds a container image in CI, pushes it to GHCR by immutable
+  digest, attaches the validation report, SBOM, checksums, the signed release
+  manifest and the CtQ traceability matrix, and records who authorised it.
+  The server then *pulls* that verified image; nothing pushes into production.
+- **A release cannot publish without a green validation report and a signed
+  release manifest.** The release workflow fails if the `validation-docs`
+  target produces no report or the manifest cannot be signed, and the
+  on-server agent **refuses to deploy** any digest not covered by a manifest
+  whose SSH signature verifies against its `allowed_signers`. "It built" is
+  not "it released".
 - **The version tag must be signed**, the same as your commits. The build's
   `tag` target creates a signed tag; the release workflow refuses an
   unsigned one, and a tag ruleset stops a published `v*` tag being moved or

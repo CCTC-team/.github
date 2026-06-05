@@ -1,5 +1,11 @@
 # Component-Aware (Multi-Image) Release Contract Implementation Plan
 
+> **Superseded in part:** the build-provenance **attestation** elements described
+> below were removed and replaced by an SSH-signed release manifest — see
+> `Replace attestation with signed release manifest.md` and
+> `docs/release-provenance-risk-assessment.md`. The multi-image contract itself
+> stands; read "attest each image" as "record each digest in the signed manifest".
+
 ## Context
 
 The release pipeline delivered by `AIPlans/InProgress/GCP pull-agent release pipeline plan.md`

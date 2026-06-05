@@ -420,9 +420,9 @@ class TestReleased:
         elif release == "no-asset":
             ev.published_releases[(REPO, merge_sha)] = ReleaseMeta(
                 tag="v1.0.0", sha=merge_sha, has_validation_asset=False)
-        elif release == "attested":
+        elif release == "signed":
             ev.published_releases[(REPO, merge_sha)] = ReleaseMeta(
-                tag="v1.0.0", sha=merge_sha, has_validation_asset=True, has_provenance=True)
+                tag="v1.0.0", sha=merge_sha, has_validation_asset=True, has_signed_manifest=True)
         return ev
 
     def test_passes_with_published_release_carrying_validation_report(self):
@@ -445,21 +445,21 @@ class TestReleased:
         reasons = released.check(_item(), _ctx(), self._evidence(release="no-asset"))
         assert any("no\n" not in r and "validation report" in r for r in reasons)
 
-    def test_attestation_flag_off_passes_without_provenance(self):
+    def test_signed_manifest_flag_off_passes_without_manifest(self):
         # Default config: a release with the validation report but no recorded
-        # provenance still passes (the flag is off during rollout).
+        # signed manifest still passes (the flag is off during rollout).
         assert released.check(_item(), _ctx(), self._evidence(release="with-asset")) == []
 
-    def test_attestation_flag_on_requires_provenance(self):
-        cfg = {"require_release_attestation": True}
+    def test_signed_manifest_flag_on_requires_manifest(self):
+        cfg = {"require_signed_manifest": True}
         reasons = released.check(
             _item(), _ctx(config=cfg), self._evidence(release="with-asset"))
-        assert any("provenance attestation" in r for r in reasons)
+        assert any("signed release manifest" in r for r in reasons)
 
-    def test_attestation_flag_on_passes_with_provenance(self):
-        cfg = {"require_release_attestation": True}
+    def test_signed_manifest_flag_on_passes_with_manifest(self):
+        cfg = {"require_signed_manifest": True}
         assert released.check(
-            _item(), _ctx(config=cfg), self._evidence(release="attested")) == []
+            _item(), _ctx(config=cfg), self._evidence(release="signed")) == []
 
 
 def test_preconditions_registry_complete():

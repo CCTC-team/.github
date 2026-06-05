@@ -1,5 +1,13 @@
 # GCP/MHRA Pull-Agent Release Pipeline Implementation Plan
 
+> **Superseded in part:** the GitHub **attestation** trust model below (`attest-
+> build-provenance`, `gh attestation verify --signer-workflow`) was removed —
+> private-repo attestations need GitHub Enterprise Cloud, which the org lacks — and
+> replaced by an SSH-signed release manifest the agent verifies against
+> `allowed_signers`. See `Replace attestation with signed release manifest.md` and
+> `docs/release-provenance-risk-assessment.md`. The pull-agent model is otherwise
+> unchanged.
+
 ## Context
 
 CCTC-team regulated repos have the *development* half of a GxP-defensible SDLC

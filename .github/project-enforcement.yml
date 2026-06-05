@@ -39,7 +39,7 @@ preconditions:
   QA approved: evaluate
   # Released stays in evaluate until the release pipeline has proven itself
   # end-to-end: the release workflow must have cut at least one real PUBLISHED
-  # Release with all artifacts green (validation report + SBOM + provenance),
+  # Release with all artifacts green (validation report + SBOM + signed manifest),
   # AND the pull-agent must have performed one verified pull-deploy on staging.
   # Flipping to active before then would block legitimate cards behind a gate
   # whose upstream (the published Release) cannot yet be produced.

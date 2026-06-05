@@ -9,10 +9,11 @@ release, or a published release with no validation report attached does **not**
 satisfy the gate. The validation report is attached by the release workflow only
 when it runs and succeeds, so the gate proves the release pipeline actually ran.
 
-The optional provenance-attestation requirement (config flag
-``require_release_attestation``, default off) additionally requires the release
-to carry a verifiable build-provenance attestation. It stays off until the
-release workflow is active across the estate.
+The optional signed-manifest requirement (config flag
+``require_signed_manifest``, default off) additionally requires the release to
+carry the signed release manifest's detached signature
+(``release-manifest.json.sig``). It stays off until the release workflow is
+active across the estate.
 """
 
 from __future__ import annotations
@@ -56,10 +57,11 @@ def check(item_meta, ctx, evidence) -> list[str]:
             f"mode and succeed before this card can reach Released."
         )
 
-    if (ctx.config or {}).get("require_release_attestation") and not release.has_provenance:
+    if (ctx.config or {}).get("require_signed_manifest") and not release.has_signed_manifest:
         reasons.append(
-            f"Release `{release.tag}` has no verifiable provenance attestation "
-            f"(required while `require_release_attestation` is enabled)."
+            f"Release `{release.tag}` has no signed release manifest "
+            f"(`release-manifest.json.sig`), required while `require_signed_manifest` "
+            f"is enabled."
         )
 
     return reasons

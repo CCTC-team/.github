@@ -24,7 +24,7 @@ Configure it once, per repo:
    publishes.
 
 When an `environment` is set, a dedicated approval-gate job runs after the build
-and attestation and **before** the publish job, holding the run on this
+and **before** the publish job, holding the run on this
 Environment's required reviewers; the publish job only proceeds once approved.
 GitHub records **who** approved, **when** (UTC), and the run is bound to the exact
 **image digest(s)** being released (one per component image). That approval is

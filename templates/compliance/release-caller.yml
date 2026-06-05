@@ -2,8 +2,8 @@
 #
 # Ships as `.github/workflows/release.yml` (pushed by the compliance-drift
 # workflow). A push of a `v*` tag triggers the org's reusable release workflow,
-# which builds and signs the container image, pushes it to GHCR by digest,
-# attests provenance + SBOM, and cuts a Release with the validation evidence.
+# which builds the container image, pushes it to GHCR by digest, generates an
+# SBOM and signs a release manifest, and cuts a Release with the validation evidence.
 #
 # All repo-specific binding (build commands, image ref, report/SBOM paths) lives
 # in `.github/release-targets.yml` — there is deliberately nothing repo-specific
