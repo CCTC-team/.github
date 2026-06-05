@@ -132,6 +132,9 @@ modes differ in what they produce and enforce:
   report, CtQ traceability matrix, `SHA256SUMS`. The team inspects this output
   for real, but nothing is published.
 - The vulnerability scan **warns** on critical/high findings but does not fail.
+  It does, however, **fail the build in either mode if the scan itself does not
+  complete** (e.g. grype's vulnerability DB fails to download) — an image that was
+  never scanned is never certified clean.
 - The pull-agent **ignores drafts**, so nothing auto-deploys to production. The
   draft is for human inspection only.
 
@@ -139,7 +142,8 @@ modes differ in what they produce and enforce:
 
 - The workflow cuts a **published** Release. If `environment: production` is set,
   publication blocks on the `production` Environment's required reviewers.
-- The vulnerability scan **fails** the release on any critical/high finding.
+- The vulnerability scan **fails** the release on any critical/high finding, and
+  (as in `evaluate`) also fails closed if the scan does not complete.
 - The pull-agent sees the published, approved Release, verifies its **signed
   release manifest** against `allowed_signers`, pulls the image **by digest**, and
   deploys it — recording the deploy in its append-only audit log.

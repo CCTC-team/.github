@@ -317,12 +317,14 @@ jobs:
         run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
       # One scan per image SBOM; the gate aggregates — in active mode the release
-      # fails if ANY image carries a critical/high finding.
+      # fails if ANY image carries a critical/high finding. A scan that does not
+      # complete (e.g. grype's vulnerability DB fails to download) fails the build
+      # in BOTH modes — an unscanned image is never certified as clean.
       - name: Vulnerability scan
         if: steps.gate.outputs.applicable == 'true'
         run: |
           blocking=$(PYTHONPATH="$TOOLING" /tmp/release/bin/python <<'PY'
-          import json, os, subprocess
+          import json, os, subprocess, sys
 
           from release import sbom_scan
 
@@ -331,18 +333,27 @@ jobs:
           any_blocking = False
           summary = []
           for img in images:
-              out = subprocess.run(
+              proc = subprocess.run(
                   ["grype", f"sbom:{img['sbom_src']}", "-o", "json"],
                   capture_output=True, text=True,
-              ).stdout or "{}"
-              result = sbom_scan.summarize(json.loads(out))
+              )
+              try:
+                  result = sbom_scan.load(
+                      proc.stdout, returncode=proc.returncode, stderr=proc.stderr
+                  )
+              except sbom_scan.ScanError as exc:
+                  print(f"grype did not complete for {img['name']}: {exc}", file=sys.stderr)
+                  sys.exit(3)
               summary.append(f"### {img['name']}\n\n{result.markdown}")
               any_blocking = any_blocking or result.has_blocking
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(summary))
           print("1" if any_blocking else "0")
           PY
-          )
+          ) || {
+            echo "::error::Vulnerability scan did not complete (see stderr above) — refusing to release without a successful scan."
+            exit 1
+          }
           if [ "$blocking" = "1" ]; then
             if [ "$ENFORCEMENT" = "active" ]; then
               echo "::error::Critical/High vulnerabilities present in at least one image — failing active release."

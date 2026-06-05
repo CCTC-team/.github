@@ -1,15 +1,27 @@
 """Summarise grype vulnerability-scan output.
 
 The release workflow runs grype over the SBOM and feeds its JSON here. This is
-the pure, testable part: tally findings by severity, decide whether the result
-should block a release in `active` mode (any Critical or High), and render a
-step-summary markdown block. Running grype, and acting on ``has_blocking``, are
-the workflow's job.
+the pure, testable part: validate that grype actually completed, tally findings
+by severity, decide whether the result should block a release in `active` mode
+(any Critical or High), and render a step-summary markdown block. Running grype,
+and acting on ``has_blocking``, are the workflow's job.
+
+``load`` is **fail-closed**: a scan that did not genuinely run — a non-zero
+grype exit, empty or unparseable output, or a document with no vulnerability-DB
+descriptor — raises :class:`ScanError` rather than being silently tallied as a
+clean image. This stops a broken scanner (most importantly, a failed
+vulnerability-DB download) from masquerading as "no vulnerabilities" and waving
+a release through the gate.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+
+
+class ScanError(RuntimeError):
+    """The grype run did not complete — a scanner failure, not a clean result."""
 
 # Severity buckets in descending order; anything grype reports outside this set
 # is counted as "unknown" rather than dropped.
@@ -69,3 +81,32 @@ def summarize(grype: dict) -> ScanResult:
         else:
             result.unknown += 1
     return result
+
+
+def load(stdout: str, *, returncode: int = 0, stderr: str = "") -> ScanResult:
+    """Validate a grype invocation and summarise it, or raise :class:`ScanError`.
+
+    Fail-closed: only a genuinely completed scan is summarised. A genuinely clean
+    image (DB loaded, zero matches) returns an empty :class:`ScanResult`; a scan
+    that never ran raises rather than reporting a false clean.
+    """
+    if returncode != 0:
+        raise ScanError(
+            f"grype exited with status {returncode}: {stderr.strip() or '(no stderr)'}"
+        )
+    text = (stdout or "").strip()
+    if not text:
+        raise ScanError("grype produced no output")
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ScanError(f"grype output is not valid JSON: {exc}") from exc
+    if not isinstance(document, dict) or "matches" not in document:
+        raise ScanError("grype output has no 'matches' — the scan did not complete")
+    descriptor = document.get("descriptor")
+    if not isinstance(descriptor, dict) or not descriptor.get("db"):
+        raise ScanError(
+            "grype output carries no vulnerability-DB descriptor — the DB did not "
+            "load; refusing to treat an unscanned image as clean"
+        )
+    return summarize(document)

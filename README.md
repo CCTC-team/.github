@@ -751,7 +751,7 @@ enabling the on-server timer. Record each flip here.
 | Control | Active | Notes |
 | --- | --- | --- |
 | release workflow (publish) | _pending_ | Flip the caller `enforcement: evaluate → active` after one clean draft-Release cycle |
-| release workflow (vuln gate) | _pending_ | Fails on critical/high in `active`; warns in `evaluate` |
+| release workflow (vuln gate) | _pending_ | Fails on critical/high in `active`; warns in `evaluate`; fails closed in **either** mode if the scan does not complete (e.g. grype DB unavailable) |
 | pull-agent (staging) | _pending_ | Enable after one verified pull-deploy on staging |
 | pull-agent (production) | _pending_ | Enable after staging is proven |
 

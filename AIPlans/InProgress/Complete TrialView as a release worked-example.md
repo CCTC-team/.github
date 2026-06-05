@@ -48,14 +48,14 @@
    pass in `active` on the current images. Same result on rc7 (image is unchanged
    by the test-dep fixes).
 
-   **Robustness caveat (follow-up, not a blocker):** `summarize()` tallies
-   `grype["matches"]`; if grype ever fails to fetch its vuln DB its output is
-   empty and the gate reads `total=0` → "✅ No known vulnerabilities" →
-   `has_blocking=False` — i.e. a scanner failure is indistinguishable from a
-   genuine clean. For a regulated gate, harden the workflow to assert grype
-   actually ran (check its exit code / DB-update status, or treat a 0-total scan
-   of a multi-thousand-component image as suspect). Tracked here as a
-   recommended improvement to the org release workflow.
+   **Robustness gap — fixed.** Previously `summarize()` tallied `grype["matches"]`
+   only; a grype DB-fetch failure yielded empty output read as `total=0` → "✅ No
+   known vulnerabilities" → false clean. Hardened: `sbom_scan.load()` is now
+   fail-closed (rejects a non-zero grype exit, empty/garbage output, or a document
+   with no vulnerability-DB descriptor with `ScanError`), and the release
+   workflow's vuln-scan step fails the build **in either mode** when the scan does
+   not complete. Covered by `TestLoad` in `test_sbom_scan.py`; README +
+   `docs/release-process.md` + wiki `Release-Process.md` updated.
 
    **State:** remediation is on `rh_dev` via PR #19 → `develop` (not yet merged),
    so dependabot will not auto-close the repo-manifest alerts until it lands. The
