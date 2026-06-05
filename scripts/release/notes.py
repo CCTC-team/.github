@@ -211,8 +211,9 @@ def build_notes(repo, milestone, tag, prev_tag, compliance, evidence, images=Non
     lines += [
         "## Release authorisation",
         "",
-        "_To be completed at the `production` Environment approval: approver "
-        "identity, UTC timestamp, and the released image digest(s) "
+        "_Pending — to be completed when this release is authorised by a "
+        "`qa-approvers` member commenting `/approve` on the authorisation issue: "
+        "approver identity, UTC timestamp, and the released image digest(s) "
         "(`ghcr.io/…@sha256:…`)._",
         "",
     ]

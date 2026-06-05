@@ -73,7 +73,7 @@ chain that would have to be defeated is already a controlled GxP control:
 | **The digest is named by the authenticated, access-controlled GitHub Release** the pipeline cut. Substituting it requires compromising org Release-write permissions — the same boundary that protects the rulesets and audit log. | A second, independent trust root, scoped by org access control. | release workflow → Release notes |
 | **Signed tag + signed commits, approver ≠ last pusher, zero bypass.** The release is cut from a signed tag over signed commits under the `gcp-critical` ruleset. | Cryptographic integrity of the **source** end of the chain (ALCOA+ *Attributable*). | branch/tag rulesets; [alcoa-sdlc-rationale.md](alcoa-sdlc-rationale.md) |
 | **Deploy record logs digest + build run ID + commit SHA.** | The artifact → build run → reviewed, signed commit link an inspector actually wants (ALCOA+ *Complete*, *Contemporaneous*). | agent audit log (25-year retention) |
-| **Restricted deployment + production Environment approval.** | Only an authorised actor causes a deploy; the QA approver is recorded. | [release-authorisation.md](release-authorisation.md) |
+| **Restricted deployment + ChatOps release authorisation.** | Only a published Release deploys, and publication needs a `/approve` from a non-author `qa-approvers` member; the QA approver is recorded. | [release-authorisation.md](release-authorisation.md) |
 
 The artifact is therefore pinned to a reviewed, signed source commit and to an
 immutable, content-verified digest **carried in an SSH-signed manifest**, recorded

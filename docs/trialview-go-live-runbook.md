@@ -9,7 +9,8 @@ set) — with the exact clicks and commands for **this** repo.
 Two of the steps need privileges this automation does not hold and are owned by
 a human:
 
-- **§A — Production Environment + reviewers** — org/repo admin, GitHub UI or API.
+- **§A — ChatOps release authorisation** (qa-approvers Read + org-read token +
+  authorise caller) — org/repo admin, GitHub UI or API.
 - **§B — Pull-agent on staging** — ops, server shell access.
 
 The remaining steps (vuln remediation, the caller flip + signed tag, the board
@@ -19,18 +20,22 @@ dependency order is: vuln gate → **§A** + **§B** (independent) → caller fl
 
 ---
 
-## §A — Production Environment + required reviewers (org/repo admin)
+## §A — ChatOps release authorisation (org/repo admin)
 
-Gates publication of a production Release behind a QA reviewer approval, bound to
-the exact image digest, with segregation of duties (author ≠ approver). Rationale
-and the e-signature residual gap: [`release-authorisation.md`](release-authorisation.md).
+Gates publication of a production Release behind a QA `/approve`, bound to the
+exact image digest, with segregation of duties (author ≠ approver). A GitHub
+`production` Environment with required reviewers is **not** usable here:
+deployment protection rules are an Enterprise feature for private repos, and this
+org is on Team. Rationale and the e-signature residual gap:
+[`release-authorisation.md`](release-authorisation.md); token provisioning:
+[`release-authorisation-token-setup.md`](release-authorisation-token-setup.md).
 
 ### A0 — Ensure the `qa-approvers` team has Read on TrialView
 
 The standing org team **`qa-approvers`** is the QA sign-off role (it also signs
 the board's `QA approved`). Membership is the human decision — and at least one
-member must be someone *other* than whoever cuts the `v0.0.1` tag, or
-**Prevent self-review** (A1) leaves no one able to approve.
+member must be someone *other* than whoever cuts the `v0.0.1` tag, or the
+author≠approver rule leaves no one able to approve.
 
 Granting that team **Read** on each regulated repo is a standing onboarding
 control, not a TrialView one-off — see [onboarding a regulated
@@ -42,75 +47,69 @@ gh api -X PUT orgs/CCTC-team/teams/qa-approvers/repos/CCTC-team/TrialView \
   -f permission=pull          # "pull" == Read
 ```
 
-**Read — never Write.** GitHub only requires *read* access for a required
-reviewer to approve a deployment, and a release approver must not be able to
-change the artifact they authorise (write would let them push code, merge PRs, or
-edit the release workflow — collapsing the QA gate's independence; segregation of
-duties, ICH E6(R3) §3.16). Read is the access ceiling for this team.
+**Read — never Write.** Commenting `/approve` on an issue needs only Read, and a
+release approver must not be able to change the artifact they authorise (write
+would let them push code, merge PRs, or edit the release workflow — collapsing the
+QA gate's independence; segregation of duties, ICH E6(R3) §3.16). Read is the
+access ceiling for this team.
 
-### A1 — Create the `production` Environment
+### A1 — Grant TrialView access to the `QA_ORG_READ_TOKEN` secret
 
-**UI:** TrialView → *Settings → Environments → New environment* → name it
-`production`.
-
-**Or API** — resolve the team id, then create the Environment with required
-reviewers, self-review prevention, and a custom (tag) branch policy in one call:
-
-```bash
-TEAM_ID=$(gh api orgs/CCTC-team/teams/qa-approvers -q .id)
-
-gh api -X PUT repos/CCTC-team/TrialView/environments/production --input - <<JSON
-{
-  "wait_timer": 0,
-  "prevent_self_review": true,
-  "reviewers": [{ "type": "Team", "id": $TEAM_ID }],
-  "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true }
-}
-JSON
-```
-
-- `prevent_self_review: true` is the **segregation-of-duties** control
-  (ICH E6(R3) §3.16): the release author cannot approve their own release.
-- To use named individuals instead of a team, use
-  `{ "type": "User", "id": <user-id> }` (`gh api users/<login> -q .id`).
-
-### A2 — Restrict deployments to `v*` tags
+The approval workflow verifies `qa-approvers` membership server-side with an
+org-read token (the default `GITHUB_TOKEN` cannot read org teams). Grant the repo
+access to the existing org secret (provision it once per
+[token setup](release-authorisation-token-setup.md)):
 
 ```bash
-gh api -X POST repos/CCTC-team/TrialView/environments/production/deployment-branch-policies \
-  -f name='v*' -f type=tag
+# Re-run with the FULL repo list — --repos replaces the access set.
+gh secret set QA_ORG_READ_TOKEN --org CCTC-team --visibility selected \
+  --repos CCTC-team/TrialView   # add every regulated repo that cuts releases
 ```
 
-Only `v*` tags can then deploy to `production`, matching the signed-tag release
-trigger.
+If this is missed, every `/approve` resolves to a non-member and is ignored, so a
+gated release can never publish.
 
-### A3 — Point the caller at the Environment
+### A2 — Ensure the authorisation caller is present
 
-In **TrialView** `.github/workflows/release.yml`, uncomment the `environment:`
+TrialView needs `.github/workflows/release-authorize.yml` (the `issue_comment`
+caller that forwards `/approve` to the org's reusable authorisation workflow). It
+is stubbed automatically by the compliance-drift workflow from
+`templates/compliance/release-authorize-caller.yml`; confirm it exists:
+
+```bash
+gh api repos/CCTC-team/TrialView/contents/.github/workflows/release-authorize.yml \
+  -q .path   # expect: .github/workflows/release-authorize.yml
+```
+
+### A3 — Point the caller at the approvers team
+
+In **TrialView** `.github/workflows/release.yml`, uncomment the `approvers_team:`
 line under the reusable-workflow `with:` block:
 
 ```yaml
     with:
       tag: ${{ github.ref_name }}
       enforcement: evaluate        # flipped to active at go-live (see caller-flip step)
-      environment: production      # ← uncomment: pause publish on QA approval
+      approvers_team: qa-approvers  # ← uncomment: cut a draft + hold for /approve
 ```
 
-When set, an approval-gate job holds the run on the `production` reviewers
-**before** publish; the publish job fills the Release notes'
+When set on an `active` release, the build cuts a **draft** Release and opens a
+digest-bound authorisation issue; the authorise caller publishes the draft on a
+`/approve` from a non-author `qa-approvers` member, filling the Release notes'
 `## Release authorisation` block with the approver identity, UTC timestamp, and
 released digest(s).
 
 ### A4 — Verify
 
 ```bash
-gh api repos/CCTC-team/TrialView/environments/production \
-  -q '{name: .name, reviewers: [.protection_rules[]?.reviewers[]?.reviewer.slug]}'
-gh api repos/CCTC-team/TrialView/environments/production/deployment-branch-policies \
-  -q '.branch_policies[] | .name + " (" + .type + ")"'
+gh api orgs/CCTC-team/teams/qa-approvers/repos/CCTC-team/TrialView -q .permissions.pull
+# expect: true   (qa-approvers has Read)
+gh api repos/CCTC-team/TrialView/contents/.github/workflows/release-authorize.yml -q .path
+# expect: .github/workflows/release-authorize.yml
 ```
 
-Expect `production`, the QA team as reviewer, and `v* (tag)`.
+Confirm too that TrialView is in the `QA_ORG_READ_TOKEN` secret's repository
+access list (Org → Settings → Secrets and variables → Actions).
 
 ---
 
@@ -178,8 +177,10 @@ sequence is visible:
 1. Confirm the **grype image scan** is clean in a dry-run (it scans the image
    SBOMs, not repo manifests — the remediated functional-test/Java advisories
    are not in either image).
-2. Flip the caller `enforcement: evaluate → active` and cut a **signed**
-   `v0.0.1` tag (`git tag -s`). With §A done, publish pauses on QA approval.
+2. Flip the caller `enforcement: evaluate → active` (and set
+   `approvers_team: qa-approvers`) and cut a **signed** `v0.0.1` tag
+   (`git tag -s`). With §A done, the release is cut as a **draft** and held for a
+   `/approve` on the authorisation issue before it publishes.
 3. Drive a board card (#34) to `Released` behind the published Release, then flip
    `preconditions: Released` (and the remaining board checks) `evaluate → active`
    in `.github/project-enforcement.yml`, recording the dates in the rollout logs.

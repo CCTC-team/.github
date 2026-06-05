@@ -129,7 +129,7 @@ change.
 
 ## Phase 1: Decision core — verdict logic
 
-- [ ] **1a. Tests — NEW:** `scripts/release/tests/test_authorization.py`
+- [x] **1a. Tests — NEW:** `scripts/release/tests/test_authorization.py`
   - Cover `decide(...)` returning an `AuthDecision(action, reason)` where
     `action ∈ {"approve", "deny", "ignore"}`:
     - `/approve` by a team member who is not the author → `approve`.
@@ -147,7 +147,7 @@ change.
     - `issue_is_authorisation=False` → `ignore`.
   - Note: pure inputs only — no `gh`, no network. Mirror `test_sbom_scan.py` shape.
 
-- [ ] **1b. Implementation — NEW:** `scripts/release/authorization.py`
+- [x] **1b. Implementation — NEW:** `scripts/release/authorization.py`
   - `@dataclass AuthDecision: action: str; reason: str`.
   - `decide(*, comment_body, commenter, author, is_team_member, issue_is_authorisation, already_resolved) -> AuthDecision`.
   - Pure; module docstring states it is the testable core and the workflow does
@@ -157,7 +157,7 @@ change.
 
 ## Phase 2: Authorisation-issue render + parse
 
-- [ ] **2a. Tests — MODIFY:** `scripts/release/tests/test_authorization.py`
+- [x] **2a. Tests — MODIFY:** `scripts/release/tests/test_authorization.py`
   - `render_issue(record) -> (title, body)`: body carries tag, repo, run id/url,
     recorded author, and a per-component `name ref@sha256:…` table, plus the
     `/approve` · `/deny` instruction and the SoD note. Title is stable/greppable.
@@ -168,7 +168,7 @@ change.
   - Digests are carried in a machine-readable fenced block (e.g. JSON), not only
     the human table, so `parse_issue` is exact and not regex-fragile.
 
-- [ ] **2b. Implementation — MODIFY:** `scripts/release/authorization.py`
+- [x] **2b. Implementation — MODIFY:** `scripts/release/authorization.py`
   - `@dataclass IssueRecord` + `render_issue` / `parse_issue`. The machine block
     is the source of truth for `parse_issue`; the table is human-facing only.
 
@@ -176,7 +176,7 @@ change.
 
 ## Phase 3: Reusable release workflow — draft + open issue
 
-- [ ] **3a. MODIFY:** `.github/workflows/release.yml`
+- [x] **3a. MODIFY:** `.github/workflows/release.yml`
   - Inputs: **remove** `environment`; **add** `approvers_team` (string, default
     `""`) — "org team slug whose members authorise an active release by
     commenting `/approve` on the authorisation issue".
@@ -197,16 +197,30 @@ change.
   - Note: the notes' `## Release authorisation` block is rendered as **pending**
     at draft time; Phase 4 fills it on publish.
 
-- [ ] **3b. MODIFY:** `templates/compliance/release-caller.yml`
+- [x] **3b. MODIFY:** `templates/compliance/release-caller.yml`
   - Replace the commented `# environment: production` line with
     `approvers_team: qa-approvers` guidance; keep `enforcement: evaluate` as the
     starting point. Update the header comment to describe the ChatOps gate.
+  - **Deviation from plan:** also raised the caller's `issues:` permission from
+    `read` to `write` (the reusable release job now opens the authorisation
+    issue) and corrected the `actions: read` comment (it now scopes the build-
+    artifact download, not the deleted run-approvals read).
+
+- [x] **3c. MODIFY (deviation from plan):** `labels.json`
+  - Added the `release-authorisation` org label. Decision 8 and Phase 3a require
+    the issue to be `--label release-authorisation`, but `gh issue create` fails
+    if the label does not exist in the repo, and labels are synced from this
+    canonical file by `sync-labels.sh`. Registering it here is what makes the
+    Phase 3a label assignment (and the Phase 4b caller's cheap label pre-filter)
+    actually work. Also updated `notes.py`'s pending authorisation placeholder to
+    name the `/approve` ChatOps gate instead of the removed `production`
+    Environment.
 
 ---
 
 ## Phase 4: Approval workflow — publish on `/approve`
 
-- [ ] **4a. NEW:** `.github/workflows/release-authorize.yml` (reusable)
+- [x] **4a. NEW:** `.github/workflows/release-authorize.yml` (reusable)
   - `on: workflow_call` with a `secrets: org_read_token` (App/PAT with
     `read:org`). Inputs carry the triggering comment + issue numbers/bodies from
     the caller's `issue_comment` context, written to files (Decision 7).
@@ -225,7 +239,17 @@ change.
     (comment/close). Idempotent: re-running on a closed/resolved issue is a no-op
     (Decision 10).
 
-- [ ] **4b. NEW:** `templates/compliance/release-authorize-caller.yml`
+- [x] **Review fix (4a):** the approve/deny/ignore actions were first written as
+  one `case` script with the notes-stamping Python heredoc **nested inside the
+  `approve)` arm**. After YAML block-scalar stripping the `PY` terminator sat at
+  column 4, so bash never closed the heredoc — on a real `/approve` the release
+  would publish but the notes would not be stamped and the issue would not close
+  (audit-trail loss). Refactored into three `if:`-gated steps so every heredoc
+  sits at the base indentation and terminates cleanly; also made the notes-stamp
+  fall back to *append* (not silently double) if the `## Release authorisation`
+  marker is absent. Found by the correctness review sub-agent.
+
+- [x] **4b. NEW:** `templates/compliance/release-authorize-caller.yml`
   - Per-repo caller: `on: issue_comment: [created]`, `if:` the issue is open and
     (cheaply) looks like an authorisation issue; calls
     `CCTC-team/.github/.github/workflows/release-authorize.yml@main`, passing the
@@ -235,51 +259,73 @@ change.
 
 ## Phase 5: Provisioning + onboarding wiring
 
-- [ ] **5a. NEW:** `docs/release-authorisation-token-setup.md`
+- [x] **5a. NEW:** `docs/release-authorisation-token-setup.md`
   - How to provision the `read:org` token the approval workflow needs (extend an
     existing App installation, or a fine-grained PAT with org **Members: read**),
     stored as the org/repo Actions secret `QA_ORG_READ_TOKEN`. State the least-
     privilege scope and why the default `GITHUB_TOKEN` is insufficient.
 
-- [ ] **5b. MODIFY:** onboarding scaffolding list
+- [x] **5b. MODIFY:** onboarding scaffolding list
   - Add the `release-authorize` caller to the regulated-repo scaffolding (the
     drift-stubbed caller set) so onboarded release-cutting repos get it, alongside
     granting `qa-approvers` Read (already documented) and the `QA_ORG_READ_TOKEN`
     secret access. (Reflected in the Documentation section below.)
+  - **Where:** `scripts/compliance-drift.sh` — added
+    `release-authorize-caller.yml` to the canonical-file sanity list and a stub
+    block (`.github/workflows/release-authorize.yml`, stubbed-if-missing, never
+    overwritten); updated the `.github/workflows/compliance-drift.yml` header
+    list to match.
 
 ---
 
 ## Documentation
 
-- [ ] **MODIFY:** `docs/release-authorisation.md` — rewrite the mechanism from
+- [x] **MODIFY:** `docs/release-authorisation.md` — rewrite the mechanism from
   "Environment + required reviewers" to the ChatOps gate (draft → `/approve` by a
   non-author `qa-approvers` member → publish). State plainly that Environment
   required reviewers are Enterprise-only for private repos and this is the Team
   equivalent. Keep and re-anchor the six-requirement e-signature mapping (the
   digest-bound/attributable/contemporaneous evidence now comes from the issue +
   publish event; the formal e-signature of record still lives in the QMS/app).
-- [ ] **MODIFY:** `docs/trialview-go-live-runbook.md` §A — replace the
+- [x] **MODIFY:** `docs/trialview-go-live-runbook.md` §A — replace the
   Environment-creation steps with: ensure `qa-approvers` has Read (kept), add the
   `release-authorize` caller + `QA_ORG_READ_TOKEN`, set `approvers_team` in the
   caller. Drop the `gh api .../environments` calls (they don't gate on Team).
-- [ ] **MODIFY:** `.github/.github` `README.md` — the release rollout-log row and
-  any "production Environment" wording; describe the ChatOps gate.
-- [ ] **MODIFY:** wiki `Release-Process.md` — the `active` description and the job
+- [x] **MODIFY:** `.github/.github` `README.md` — the release rollout-log row and
+  any "production Environment" wording; describe the ChatOps gate. (Added a
+  dedicated `release authorisation (ChatOps)` rollout-log row.)
+- [x] **MODIFY:** wiki `Release-Process.md` — the `active` description and the job
   graph (`authorize` job → ChatOps approval workflow).
-- [ ] **MODIFY:** wiki `Onboarding-a-Regulated-Repo.md` — under the release steps,
+- [x] **MODIFY:** wiki `Onboarding-a-Regulated-Repo.md` — under the release steps,
   add the `release-authorize` caller + `QA_ORG_READ_TOKEN` alongside the existing
-  `qa-approvers` Read grant (Step 10) and signing-key access (Step 9).
-- [ ] **MODIFY:** `CLAUDE.md` (release section, if it references the Environment
-  gate) — point to the ChatOps mechanism.
+  `qa-approvers` Read grant (Step 10) and signing-key access (Step 9). (Added as
+  Step 10b.)
+- [x] **MODIFY:** `CLAUDE.md` (release section, if it references the Environment
+  gate) — point to the ChatOps mechanism. **No change needed:** CLAUDE.md does not
+  reference the release/Environment gate (only a venv mention of "environment").
+- [x] **MODIFY (deviation — additional stale references reconciled):** the change
+  also touched files the plan did not enumerate but which described the removed
+  Environment gate: `docs/release-process.md` (flow diagram + active description +
+  evidence-table row), `docs/release-provenance-risk-assessment.md` (control row),
+  and wiki `Release-Multi-Repo.md` + `Repository-Layout.md` (template/doc rows and
+  the multi-repo authorisation wording). Per CLAUDE.md the wiki is reconciled in
+  the same change.
 
 ---
 
 ## Verification
 
-- [ ] `python -m pytest scripts/release/tests/test_authorization.py` passes; full
-  `scripts/release/tests` suite still green.
-- [ ] Workflow YAML parses (`yaml.safe_load`) for `release.yml`,
+- [x] `python -m pytest scripts/release/tests/test_authorization.py` passes (20
+  tests); full `scripts/release/tests` suite still green (91 tests).
+- [x] Workflow YAML parses (`yaml.safe_load`) for `release.yml`,
   `release-authorize.yml`, and both caller templates.
+
+The remaining items are a **live dry-run on TrialView** — they need a real tag
+push, the `QA_ORG_READ_TOKEN` secret provisioned (Phase 5a), a second
+`qa-approvers` account, and GitHub credentials this environment does not hold.
+They are left unchecked for the operator to run at go-live (tracked in the
+TrialView worked-example plan / go-live runbook §A):
+
 - [ ] **Dry-run on TrialView (throwaway `v0.0.1-rcN` tag), `enforcement: active`,
   `approvers_team: qa-approvers`:** confirms a **draft** Release is cut and an
   authorisation issue is opened carrying the correct per-component digests.

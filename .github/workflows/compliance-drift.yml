@@ -14,7 +14,10 @@ name: Compliance scaffold drift check
 #     (stubbed if missing; never overwritten)
 #   - .github/release.yml release-notes config (stubbed if missing)
 #   - .github/workflows/release.yml release caller workflow (stubbed if
-#     missing; never overwritten — repos tune enforcement/environment locally)
+#     missing; never overwritten — repos tune enforcement/approvers_team locally)
+#   - .github/workflows/release-authorize.yml release-authorisation caller
+#     workflow (stubbed if missing; never overwritten — publishes a gated draft
+#     release on a /approve from a non-author qa-approvers member)
 #   - .github/release-targets.yml build-target manifest (stubbed from the
 #     worked example if missing; TODO-flagged for the owner to fill in)
 #

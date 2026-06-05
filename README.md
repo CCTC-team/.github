@@ -725,9 +725,11 @@ The deploy model is **pull, never push**: production accepts no inbound
 connection. CI builds and signs the repo's container **image(s)** — one per
 deployable component (e.g. a Blazor host *and* its F# API) — pushes each to GHCR
 by immutable digest, signs a release manifest over those digests, and cuts one
-Release gated by a `production` Environment approval. An agent **on the server**
-verifies the release's SSH-signed manifest against its `allowed_signers`, pulls the
-images **by digest**, and runs the set atomically.
+Release gated by a ChatOps `/approve` from a non-author `qa-approvers` member (the
+Team-compatible replacement for an Enterprise-only `production` Environment
+approval). An agent **on the server** verifies the release's SSH-signed manifest
+against its `allowed_signers`, pulls the images **by digest**, and runs the set
+atomically.
 The build↔workflow binding is a per-repo manifest (`.github/release-targets.yml`,
 schema [`release-targets.schema.json`](release-targets.schema.json)) against the
 tool-agnostic build-target contract in claude-org
@@ -744,13 +746,16 @@ authorisation gate and the electronic-signature residual gap are in
 The release controls roll out evaluate → active like the board checks, but flip
 by a different mechanism: the caller workflow's `enforcement:` input
 (`evaluate` cuts a **draft** Release and the agent ignores drafts; `active`
-publishes a gated Release, enforces the vulnerability gate and the `production`
-approval, and the agent deploys the verified digest), and — for the agent —
-enabling the on-server timer. Record each flip here.
+publishes the Release and enforces the vulnerability gate — or, with
+`approvers_team` set, cuts a **draft** + authorisation issue and publishes on a
+non-author `qa-approvers` `/approve`; the agent then deploys the verified
+digest), and — for the agent — enabling the on-server timer. Record each flip
+here.
 
 | Control | Active | Notes |
 | --- | --- | --- |
 | release workflow (publish) | _pending_ | Flip the caller `enforcement: evaluate → active` after one clean draft-Release cycle |
+| release authorisation (ChatOps) | _pending_ | Set the caller `approvers_team: qa-approvers` to gate active publication on a `/approve` from a non-author `qa-approvers` member; needs the `release-authorize` caller + `QA_ORG_READ_TOKEN` ([docs](docs/release-authorisation.md)) |
 | release workflow (vuln gate) | _pending_ | Fails on critical/high in `active`; warns in `evaluate`; fails closed in **either** mode if the scan does not complete (e.g. grype DB unavailable) |
 | pull-agent (staging) | _pending_ | Enable after one verified pull-deploy on staging |
 | pull-agent (production) | _pending_ | Enable after staging is proven |

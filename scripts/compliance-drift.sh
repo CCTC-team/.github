@@ -21,6 +21,7 @@ for f in "$SCHEMA_FILE" \
          "$TEMPLATES_DIR/project-card-promote-caller.yml" \
          "$TEMPLATES_DIR/release.yml" \
          "$TEMPLATES_DIR/release-caller.yml" \
+         "$TEMPLATES_DIR/release-authorize-caller.yml" \
          "$TEMPLATES_DIR/release-targets.yml.example" \
          "$TEMPLATES_DIR/README-banner.md" \
          "$TEMPLATES_DIR/CONTRIBUTING-regulated.md"; do
@@ -153,10 +154,21 @@ check_and_fix() {
   fi
 
   # 9. Release caller workflow (stubbed if missing, NOT overwritten — repos
-  # may have flipped enforcement to active or set the environment locally).
+  # may have flipped enforcement to active or set approvers_team locally).
   if [ ! -f .github/workflows/release.yml ]; then
     ensure_file_matches "$TEMPLATES_DIR/release-caller.yml" ".github/workflows/release.yml" || true
     changed=1; reasons+=("release caller workflow missing (stubbed)")
+  fi
+
+  # 9b. Release-authorisation caller workflow (stubbed if missing, NOT
+  # overwritten). Publishes a gated draft release on a /approve from a non-author
+  # qa-approvers member; needs the QA_ORG_READ_TOKEN secret to verify team
+  # membership. Safe to ship before a repo gates releases — it only fires on
+  # comments on a release-authorisation-labelled issue, which exist only once a
+  # gated active release is cut.
+  if [ ! -f .github/workflows/release-authorize.yml ]; then
+    ensure_file_matches "$TEMPLATES_DIR/release-authorize-caller.yml" ".github/workflows/release-authorize.yml" || true
+    changed=1; reasons+=("release-authorisation caller workflow missing (stubbed)")
   fi
 
   # 10. Build-target manifest (stubbed from the worked example if missing, NOT

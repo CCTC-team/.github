@@ -46,12 +46,13 @@ factor FRM129-…"* — a per-commit micro-tag could never make that claim.
   │  build ─► package (OCI image(s), one per component) ─► publish:registry      │
   │  sbom (one per image) ─► vuln scan ─► sign the release manifest (tag→digests) │
   │  validation-docs ─► SHA256SUMS ─► milestone-scoped notes + CtQ matrix        │
-  │  gh release create:   evaluate → DRAFT    |    active → PUBLISHED (gated)     │
+  │  gh release create:  evaluate → DRAFT  |  active+approvers_team → DRAFT+issue │
+  │                      active (no team)  → PUBLISHED                            │
   └──────────────────────────────────────────────────────────────────────────────┘
         │
         ▼
-  production Environment approval  (QA-approver group; bound to the image digest)
-        │
+  ChatOps authorisation  (qa-approvers /approve on the digest-bound issue;
+        │                  author ≠ approver; publishes the draft Release)
         ▼
   ┌─────────────────────── on-server pull-agent ────────────────────────────────┐
   │  poll for the approved, published Release for this app                        │
@@ -70,7 +71,7 @@ heart of the model: the trustworthy image is built once in a hardened runner
 with an OIDC identity, and the server only verifies and runs it. See the build
 target contract in claude-org `rules/guides/build-and-release.md`.
 
-The release/environment gate aligns with the board's **`QA approved → Released`**
+The release-authorisation gate aligns with the board's **`QA approved → Released`**
 transition — it fires only after *both* `User acceptance` (feature-level sign-off
 in a dev/test environment) and `QA approved` (independent QA). The formal
 Performance Qualification is performed on the built release candidate at this
@@ -92,7 +93,7 @@ not as Release assets.
 | **Validation report** | CtQ → URS → V&V → acceptance → QA summary for the milestone | ICH E6(R3) §4.3.4 (validation evidence) |
 | **CtQ traceability matrix** | CtQ factor (FRM129) → Risk → Requirement → `.feature` → acceptance/QA approver | ICH E6(R3) Principle 6 (CtQ); ALCOA+ *Complete* |
 | **`SHA256SUMS`** | Checksums over the attached file assets | ALCOA+ *Accurate*, tamper evidence |
-| **Release authorisation record** | Approver identity + UTC + image digest(s), from the Environment approval | ICH E6(R3) §4.3.5; ALCOA+ *Contemporaneous*, *Attributable* |
+| **Release authorisation record** | Approver identity + UTC + image digest(s), from the `/approve` on the authorisation issue | ICH E6(R3) §4.3.5; ALCOA+ *Contemporaneous*, *Attributable* |
 
 Inspector "where is X" shortcut: the images are in **GHCR** (by digest); the
 signed release manifest, validation report, SBOM, checksums, notes and
@@ -140,8 +141,10 @@ modes differ in what they produce and enforce:
 
 **`active`** (after a clean evaluate cycle):
 
-- The workflow cuts a **published** Release. If `environment: production` is set,
-  publication blocks on the `production` Environment's required reviewers.
+- The workflow cuts a **published** Release. If `approvers_team` is set, it
+  instead cuts a **draft** and opens a digest-bound authorisation issue;
+  publication waits for a `/approve` from a non-author member of that team
+  (the Team-compatible gate — see [release-authorisation.md](release-authorisation.md)).
 - The vulnerability scan **fails** the release on any critical/high finding, and
   (as in `evaluate`) also fails closed if the scan does not complete.
 - The pull-agent sees the published, approved Release, verifies its **signed

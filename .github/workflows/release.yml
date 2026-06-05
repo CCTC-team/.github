@@ -32,9 +32,13 @@ name: Release (reusable)
 #   "evaluate" (default) — cut a DRAFT Release with the full artifact set; the
 #       vulnerability scan warns but does not fail. The pull-agent ignores drafts,
 #       so nothing auto-deploys. Use this to inspect output during rollout.
-#   "active" — cut a PUBLISHED Release; the vulnerability scan fails on
-#       critical/high; if `environment` is set, publish blocks on the required
-#       reviewers of that Environment.
+#   "active" — the vulnerability scan fails on critical/high. With no
+#       `approvers_team`, cut a PUBLISHED Release directly. With `approvers_team`
+#       set, cut a DRAFT and open a digest-bound authorisation issue in the caller
+#       repo; a member of that team who is NOT the release author publishes it by
+#       commenting `/approve` (release-authorize.yml). This is the Team-compatible
+#       equivalent of an Enterprise `production` Environment gate — see
+#       docs/release-authorisation.md.
 #
 # Caller example (.github/workflows/release.yml in a regulated repo): see
 # templates/compliance/release-caller.yml.
@@ -58,8 +62,8 @@ on:
         description: "evaluate | active. evaluate cuts a draft and warns on vulns; active publishes and fails on critical/high."
         type: string
         default: "evaluate"
-      environment:
-        description: "Optional GitHub Environment gating publish (e.g. production). When set, the publish job blocks on its required reviewers."
+      approvers_team:
+        description: "Org team slug whose members authorise an active release by commenting /approve on the authorisation issue (e.g. qa-approvers). When set with enforcement: active, the release is cut as a draft and published only on /approve. Empty publishes directly."
         type: string
         default: ""
       tooling_ref:
@@ -500,48 +504,28 @@ jobs:
         run: echo "Release workflow not applicable to this repo (no .compliance.yml or regulatory_tier=none)."
 
   # ---------------------------------------------------------------------------
-  # Optional approval gate. Instantiated ONLY when an `environment` is configured;
-  # it blocks on that Environment's required reviewers, so a release into a gated
-  # environment (e.g. production) cannot proceed until an authoriser approves —
-  # the approval is recorded against this run and stamped into the notes below.
-  #
-  # Its `if:` is a pure-`inputs` expression so GitHub resolves it at workflow
-  # startup and skips the job — and its Environment — cleanly when no environment
-  # is set. A skip-condition that referenced `needs.*` (runtime) would instead
-  # force GitHub to eagerly validate an empty Environment name and fail the whole
-  # run at startup. That is exactly why the gate is a separate job and not an
-  # `environment:` on the publish job itself.
-  # ---------------------------------------------------------------------------
-  authorize:
-    needs: build
-    if: inputs.environment != ''
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    steps:
-      - name: Record the authorisation gate
-        run: echo "Release of ${{ inputs.tag }} authorised to proceed under environment '${{ inputs.environment }}'."
-
-  # ---------------------------------------------------------------------------
-  # Publish the Release. When an `environment` is set, the approval gate above
-  # blocks the run before this job, so the authoriser is recorded against this
-  # run; this job then stamps that authorisation into the notes. Draft in
-  # evaluate, published in active. Runs whether `authorize` ran (environment set
-  # and approved) or was skipped (no environment) — hence the explicit result
-  # check rather than plain `needs` success semantics.
+  # Cut the Release. There is no in-run approval gate: a gated active release
+  # (`approvers_team` set) is cut as a DRAFT and a digest-bound authorisation
+  # issue is opened in the caller repo; a separate issue_comment-triggered run
+  # (release-authorize.yml) publishes the draft on `/approve`. The build run ends
+  # here rather than blocking a runner waiting on a human (GitHub kills any job at
+  # 6h and bills the wait). An evaluate release is also a draft; an active release
+  # with no `approvers_team` publishes directly.
   # ---------------------------------------------------------------------------
   release:
-    needs: [build, authorize]
+    needs: build
     if: >-
       !cancelled()
       && needs.build.outputs.applicable == 'true'
-      && (needs.authorize.result == 'success' || needs.authorize.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
+      issues: write
     env:
       TAG: ${{ inputs.tag }}
       ENFORCEMENT: ${{ inputs.enforcement }}
+      APPROVERS_TEAM: ${{ inputs.approvers_team }}
       REPO: ${{ github.repository }}
       STATE_DIR: ${{ github.workspace }}/_release-state
     steps:
@@ -551,51 +535,27 @@ jobs:
           name: release-bundle
           path: _release-state
 
-      # When gated by an Environment, this job only runs once a required reviewer
-      # has approved — so we can record who authorised the release. This is the
-      # technical-evidence half; the formal e-signature of record is captured per
-      # docs/release-authorisation.md.
-      - name: Fill the release authorisation block
-        if: inputs.environment != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ENVIRONMENT: ${{ inputs.environment }}
+      # The release job runs on a fresh runner; re-fetch the tooling so the
+      # authorisation-issue step can render with scripts/release.
+      - name: Checkout release tooling
+        uses: actions/checkout@v6
+        with:
+          repository: CCTC-team/.github
+          ref: ${{ inputs.tooling_ref }}
+          path: _release-tooling
+
+      # An active release with an `approvers_team` is GATED: cut as a draft and
+      # held for a `/approve` on the authorisation issue. Computed once here so the
+      # create-Release and open-issue steps agree on whether to gate.
+      - name: Determine whether this release is gated
+        id: gate
         run: |
-          gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID/approvals" \
-            > "$STATE_DIR/approvals.json" 2>/dev/null || echo "[]" > "$STATE_DIR/approvals.json"
-          NOW_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-          python3 <<'PY'
-          import json, os
-          state = os.environ["STATE_DIR"]
-          with open(os.path.join(state, "approvals.json")) as f:
-              data = json.load(f)
-          approvers = sorted({
-              (e.get("user") or {}).get("login")
-              for e in (data if isinstance(data, list) else [])
-              if e.get("state") == "approved" and (e.get("user") or {}).get("login")
-          })
-          approver = ", ".join(approvers) or "_unrecorded_"
-          digests = "; ".join(
-              f"{img['name']} {img['ref']}@{img['digest']}"
-              for img in json.load(open(os.path.join(state, "images.json")))
-          )
-          marker = "## Release authorisation"
-          notes_path = os.path.join(state, "notes.md")
-          md = open(notes_path).read()
-          head = md.split(marker)[0]
-          block = (
-              f"{marker}\n\n"
-              f"- **Approved by:** {approver}\n"
-              f"- **Approved at (UTC):** {os.environ.get('NOW_UTC', '')}\n"
-              f"- **Released image digests:** {digests}\n"
-              f"- **Environment:** {os.environ.get('ENVIRONMENT', '')}\n\n"
-              "The formal electronic signature of record (re-authentication + "
-              "explicit meaning + signer role) is captured in the application "
-              "signature flow or the CTU QMS/eTMF, referencing the digests above — "
-              "see docs/release-authorisation.md.\n"
-          )
-          open(notes_path, "w").write(head + block)
-          PY
+          gated=false
+          if [ "$ENFORCEMENT" = "active" ] && [ -n "$APPROVERS_TEAM" ]; then
+            gated=true
+          fi
+          echo "gated=$gated" >> "$GITHUB_OUTPUT"
+          echo "Gated active release: $gated"
 
       # Sign the release manifest with the org release-signing key (org secret
       # RELEASE_SIGNING_KEY). This job runs no repo build commands, so the private
@@ -638,20 +598,72 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          GATED: ${{ steps.gate.outputs.gated }}
         run: |
           shopt -s nullglob
           assets=( "$STATE_DIR"/assets/* )
           args=( "$TAG" --title "$TAG" --notes-file "$STATE_DIR/notes.md" )
-          # Draft in evaluate; published in active.
-          if [ "$ENFORCEMENT" != "active" ]; then
+          # Draft in evaluate, OR when gated (a gated active release is held
+          # unpublished until /approve flips it; the pull-agent ignores drafts).
+          if [ "$ENFORCEMENT" != "active" ] || [ "$GATED" = "true" ]; then
             args+=( --draft )
           fi
-          # Prerelease (no --latest) for -rc/-beta tags.
+          # Prerelease (no --latest) for -rc/-beta tags. --latest only when we
+          # publish now: active AND not gated.
           case "$TAG" in
             *-rc*|*-beta*) args+=( --prerelease ) ;;
-            *)            [ "$ENFORCEMENT" = "active" ] && args+=( --latest ) ;;
+            *) [ "$ENFORCEMENT" = "active" ] && [ "$GATED" != "true" ] && args+=( --latest ) ;;
           esac
           gh release create "${args[@]}" "${assets[@]}"
+
+      # Gated active release: open the digest-bound authorisation issue in the
+      # caller repo. The release author is recorded here (github.actor); the
+      # author≠approver check (Decision 5) compares a /approve commenter against
+      # this value. release-authorize.yml publishes the draft on approval.
+      - name: Open the authorisation issue
+        if: steps.gate.outputs.gated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          TOOLING: ${{ github.workspace }}/_release-tooling/scripts
+        run: |
+          PYTHONPATH="$TOOLING" python3 <<'PY'
+          import json, os
+          from release import authorization
+
+          state = os.environ["STATE_DIR"]
+          manifest = json.load(open(os.path.join(state, "assets", "release-manifest.json")))
+          images = json.load(open(os.path.join(state, "images.json")))
+          record = authorization.IssueRecord(
+              tag=manifest["tag"],
+              repo=manifest["repo"],
+              run_id=os.environ["RUN_ID"],
+              run_url=os.environ["RUN_URL"],
+              author=os.environ["ACTOR"],
+              components=[
+                  authorization.Component(name=i["name"], ref=i["ref"], digest=i["digest"])
+                  for i in images
+              ],
+          )
+          title, body = authorization.render_issue(record)
+          with open(os.path.join(state, "issue-title.txt"), "w") as f:
+              f.write(title)
+          with open(os.path.join(state, "issue-body.md"), "w") as f:
+              f.write(body)
+          PY
+          title="$(cat "$STATE_DIR/issue-title.txt")"
+          gh issue create \
+            --title "$title" \
+            --body-file "$STATE_DIR/issue-body.md" \
+            --label release-authorisation
+          {
+            echo "## Release authorisation"
+            echo ""
+            echo "Draft cut — awaiting \`/approve\` from a non-author member of @${REPO%/*}/${APPROVERS_TEAM} on the authorisation issue."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Release manifest summary
         run: |
