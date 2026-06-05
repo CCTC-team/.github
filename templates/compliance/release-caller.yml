@@ -27,19 +27,20 @@ jobs:
   release:
     permissions:
       contents: write
-      id-token: write
-      attestations: write
       packages: write
       issues: read
       pull-requests: read
       # The caller's permissions are the envelope for the reusable workflow: any
       # scope omitted here is `none` for every called job, and a called job that
       # requests more fails the run at startup. `actions: read` is required — the
-      # reusable workflow reads this run's approvals (the production gate) and the
-      # run context for provenance attestation.
+      # reusable workflow reads this run's approvals (the production gate).
       actions: read
     uses: CCTC-team/.github/.github/workflows/release.yml@main
     with:
       tag: ${{ github.ref_name }}
       enforcement: evaluate
       # environment: production   # uncomment to gate publish on required reviewers
+    secrets:
+      # Org-level secret holding the release-signing private key; the reusable
+      # workflow signs the release manifest with it. See docs/release-signing-setup.md.
+      release_signing_key: ${{ secrets.RELEASE_SIGNING_KEY }}
