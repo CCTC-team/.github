@@ -100,12 +100,14 @@
 
 **Exact runbooks for gates 2 + 3** (the human-owned steps): written up
 copy-pasteable in [`docs/trialview-go-live-runbook.md`](../../docs/trialview-go-live-runbook.md)
-— §A covers the `production` Environment (incl. the open decision that **no
-QA-approver team exists yet**, the `gh api` to create it + the Environment with
-`prevent_self_review` + `v*` tag policy, and the caller `environment:` edit); §B
-covers the staging agent install over `PREREQUISITES.md` +
-`DEPLOYMENT_RUNBOOK.md` with the TrialView two-image specifics and the verified
-pull-deploy check.
+— §A covers the `production` Environment (the standing `qa-approvers` team, now
+created, granted **Read** on the repo — never Write, for segregation of duties;
+the Environment with `prevent_self_review` + `v*` tag policy; the caller
+`environment:` edit); §B covers the staging agent install over `PREREQUISITES.md`
++ `DEPLOYMENT_RUNBOOK.md` with the TrialView two-image specifics and the verified
+pull-deploy check. The QA-approver-team **Read** grant is a standing onboarding
+control for every regulated repo — captured in `docs/release-authorisation.md`
+and the wiki onboarding page (Step 10), not just this runbook.
 
 ## Parallel / separate track — TrialView GxP gaps (NOT pipeline blockers)
 

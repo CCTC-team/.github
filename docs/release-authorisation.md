@@ -11,12 +11,31 @@ Publication of a production release is gated by a GitHub **Environment** named
 `production`, configured with **required reviewers** drawn from the QA-approver
 group — the same role that signs the board's `QA approved` status.
 
-Configure it once, per repo:
+### The QA-approver team and its access (least privilege)
+
+The reviewers are a single, standing **org team, `qa-approvers`** — not a
+per-repo ad-hoc list. That team is granted **Read** access (and *only* Read) on
+**every repo in regulatory scope** (any repo whose `regulatory_tier` is not
+`none`). Granting it is part of [onboarding a regulated
+repo](https://github.com/CCTC-team/.github/wiki/Onboarding-a-Regulated-Repo), so
+the team is already assignable as the `production` reviewer by the time a repo
+cuts its first release.
+
+**Read, never Write — this is deliberate, not an oversight.** GitHub only
+requires a required reviewer to have *read* access to approve a deployment, and a
+release approver must **not** be able to change the artifact they authorise.
+Write access would let the approver push code, merge PRs, or alter the workflow —
+collapsing the independence the QA gate exists to provide (segregation of duties,
+ICH E6(R3) §3.16). Read lets them see the code and the digest-bound evidence and
+approve or reject; it grants nothing that can mutate the release. So the QA-
+approver team's access ceiling across the regulated estate is Read.
+
+### Configure the Environment, once per release-cutting repo
 
 1. **Settings → Environments → New environment → `production`.**
-2. Add **Required reviewers**: the QA-approver team/individuals. Keep this to the
-   QA role; the release author must not be able to approve their own release
-   (segregation of duties, ICH E6(R3) §3.16).
+2. Add **Required reviewers**: the org `qa-approvers` team (Read-only, per above).
+   Turn on **Prevent self-review** so the release author cannot approve their own
+   release (segregation of duties, ICH E6(R3) §3.16).
 3. Optionally set a **wait timer** and restrict deployment branches/tags to
    `v*`.
 4. In the repo's release caller (`.github/workflows/release.yml`), set

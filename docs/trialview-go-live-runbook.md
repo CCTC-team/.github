@@ -25,24 +25,28 @@ Gates publication of a production Release behind a QA reviewer approval, bound t
 the exact image digest, with segregation of duties (author ≠ approver). Rationale
 and the e-signature residual gap: [`release-authorisation.md`](release-authorisation.md).
 
-### A0 — Decide the QA-approver team (one-time decision)
+### A0 — Ensure the `qa-approvers` team has Read on TrialView
 
-There is **no QA-approver team in the org yet**. The existing teams are
-`core-prog`, `ct-prog`, `dm`, `monitors`, `cctc-team-maintainers`,
-`branch-rule-bypass`, `gtg-web-testers` — none is the QA-approval role. Decide
-whether to designate an existing team or create a dedicated one. To create one:
+The standing org team **`qa-approvers`** is the QA sign-off role (it also signs
+the board's `QA approved`). Membership is the human decision — and at least one
+member must be someone *other* than whoever cuts the `v0.0.1` tag, or
+**Prevent self-review** (A1) leaves no one able to approve.
+
+Granting that team **Read** on each regulated repo is a standing onboarding
+control, not a TrialView one-off — see [onboarding a regulated
+repo](https://github.com/CCTC-team/.github/wiki/Onboarding-a-Regulated-Repo),
+Step 10. For TrialView specifically:
 
 ```bash
-# Create the team and add the QA approver(s). Membership is the decision —
-# these people sign off production releases and the board's `QA approved`.
-gh api -X POST orgs/CCTC-team/teams -f name='qa-approvers' \
-  -f description='Signs off production releases and board QA approved' \
-  -f privacy=closed
-gh api -X PUT orgs/CCTC-team/teams/qa-approvers/memberships/<github-login> -f role=member
+gh api -X PUT orgs/CCTC-team/teams/qa-approvers/repos/CCTC-team/TrialView \
+  -f permission=pull          # "pull" == Read
 ```
 
-The approver(s) must have at least **write** access to TrialView for the
-Environment reviewer to be assignable.
+**Read — never Write.** GitHub only requires *read* access for a required
+reviewer to approve a deployment, and a release approver must not be able to
+change the artifact they authorise (write would let them push code, merge PRs, or
+edit the release workflow — collapsing the QA gate's independence; segregation of
+duties, ICH E6(R3) §3.16). Read is the access ceiling for this team.
 
 ### A1 — Create the `production` Environment
 
