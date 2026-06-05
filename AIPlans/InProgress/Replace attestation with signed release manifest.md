@@ -55,7 +55,7 @@ and add the public key to `allowed_signers` (mirrors the `*-app-setup.md` docs).
 
 Verify: `actionlint` clean.
 
-## Phase 2 — Consumer (server-structure/agent), TDD  ⬜
+## Phase 2 — Consumer (server-structure/agent), TDD  ✅ (server-structure ee308db; 34 tests pass; sign/verify proven locally)
 
 - `config.py`: replace `signer_workflow` with `allowed_signers` (path),
   `signer_principal`, `signature_namespace`. Update `config.*.yml` + ship
