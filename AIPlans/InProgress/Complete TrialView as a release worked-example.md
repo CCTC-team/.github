@@ -57,10 +57,17 @@
    not complete. Covered by `TestLoad` in `test_sbom_scan.py`; README +
    `docs/release-process.md` + wiki `Release-Process.md` updated.
 
+   **Hardened gate validated in CI.** A further dry-run on the hardened gate
+   (`v0.0.1-rc9`, TrialView run 27021688515) **passed** — and because a scan that
+   fails to complete now exits the build in **either** mode, a green build proves
+   grype genuinely ran (DB loaded) and found no critical/high. This upgrades the
+   earlier rc7/rc8 result from "inferred clean" to **positively proven clean**.
+
    **State:** remediation is on `rh_dev` via PR #19 → `develop` (not yet merged),
-   so dependabot will not auto-close the repo-manifest alerts until it lands. The
-   `v0.0.1-rc8` dry-run tag + its draft Release remain and should be cleaned up
-   (like the earlier rc tags) before cutting the real `v0.0.1`.
+   so dependabot will not auto-close the repo-manifest alerts until it lands. All
+   `v0.0.1-rc*` dry-run tags and their draft Releases have been cleaned up — the
+   repo carries no `v0.0.1*` tag or Release, leaving the name clear for the real
+   `v0.0.1`.
 
 2. **Production Environment + required reviewers.** TrialView has **no
    Environments** configured. Create a `production` Environment with the
