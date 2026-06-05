@@ -144,7 +144,11 @@ jobs:
           print(d.get("release_targets_path") or ".github/release-targets.yml")
           PY
           )
+          # Persist for later steps (cross-step), and export for THIS step — a
+          # value written to $GITHUB_ENV is not visible within the step that
+          # writes it, so the contract check below reads it from the process env.
           echo "MANIFEST=$manifest_path" >> "$GITHUB_ENV"
+          export MANIFEST="$manifest_path"
           if [ ! -f "$manifest_path" ]; then
             echo "::error file=$manifest_path::release-targets manifest not found. A regulated repo must declare its build targets."
             exit 1
