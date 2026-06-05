@@ -63,11 +63,13 @@
    grype genuinely ran (DB loaded) and found no critical/high. This upgrades the
    earlier rc7/rc8 result from "inferred clean" to **positively proven clean**.
 
-   **State:** remediation is on `rh_dev` via PR #19 → `develop` (still **OPEN**,
-   confirmed 2026-06-05), so dependabot will not auto-close the repo-manifest
-   alerts until it lands. All `v0.0.1-rc*` dry-run tags and their draft Releases
-   have been cleaned up — the repo carries no `v0.0.1*` tag or Release, leaving
-   the name clear for the real `v0.0.1`.
+   **State (updated 2026-06-05): GATE 1 COMPLETE.** PR #19 (`rh_dev` →
+   `develop`) **merged** (`1bcf690`); dependabot auto-closed the critical/high
+   advisories — TrialView now shows **0 critical / 0 high** open alerts (1 low +
+   2 medium remain, within the time-boxed triage in
+   `functional_scripts/SECURITY-triage.md`). All `v0.0.1-rc*` dry-run tags and
+   their draft Releases have been cleaned up — the repo carries no `v0.0.1*` tag
+   or Release, leaving the name clear for the real `v0.0.1`.
 
 2. **ChatOps release authorisation (`qa-approvers` `/approve`).**
    *Supersedes the original "production Environment + required reviewers" step:
