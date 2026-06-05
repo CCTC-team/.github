@@ -86,13 +86,15 @@
    `release-authorize.yml` caller is present (stubbed by compliance-drift); set
    `approvers_team: qa-approvers` in TrialView's release caller.
 
-   **State (2026-06-05): not started in TrialView.** Verified: `qa-approvers`
-   has no Read on the repo; the `QA_ORG_READ_TOKEN` org secret does not exist;
-   the `release-authorize.yml` caller is absent (the `compliance-drift` workflow
-   is not yet present in TrialView, so nothing has stubbed it); and TrialView's
-   `release.yml` caller still carries the old commented `# environment:
-   production` line — it has **not** been updated to `approvers_team:`. Owner:
-   org admin (the token value cannot be minted by this automation).
+   **State (2026-06-05): in progress.** Done: **A0** — `qa-approvers` granted
+   **Read** (pull=true, push=false, admin=false) on TrialView; never Write, for
+   segregation of duties. Remaining: **A1** — the `QA_ORG_READ_TOKEN` org secret
+   does not yet exist (the token value cannot be minted by this automation);
+   **A2** — the `release-authorize.yml` caller is absent (the `compliance-drift`
+   workflow is not yet present in TrialView, so nothing has stubbed it); **A3** —
+   TrialView's `release.yml` caller still carries the old commented `#
+   environment: production` line and has **not** been updated to
+   `approvers_team:`.
 
 3. **Pull-agent on staging (needs server access — ops).** The agent code is
    built + tested but not deployed. Per `server-structure/agent/PREREQUISITES.md`:
