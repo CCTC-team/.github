@@ -76,7 +76,7 @@ Verify: `actionlint` clean.
 
 Verify: `python -m pytest` (agent suite) green.
 
-## Phase 3 — Docs, wiki, risk assessment, memory  ⬜
+## Phase 3 — Docs, wiki, risk assessment, memory  ✅ (.github aae6675 · wiki 263d348)
 
 - Finalise `docs/release-provenance-risk-assessment.md`: attestation **removed**
   (not parked); SSH-signed manifest is the implemented alternative; drop the
