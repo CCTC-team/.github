@@ -218,10 +218,14 @@ jobs:
             fi
             echo "::group::$name"
             echo "+ $cmd"
-            # Capture the exit code so a failure still closes the log group
-            # (the step runs under `set -e`; `if` keeps it from aborting here).
+            # Run the target, capturing its real exit code so a failure still
+            # closes the log group before propagating. `|| rc=$?` keeps `set -e`
+            # from aborting here AND records the genuine status — unlike
+            # `if ! cmd; then rc=$?`, where `$?` inside the branch is the negated
+            # (always-zero) status of `! cmd`, which would silently swallow a
+            # failed build/package/publish and limp on to later steps.
             local rc=0
-            if ! bash -c "$cmd"; then rc=$?; fi
+            bash -c "$cmd" || rc=$?
             echo "::endgroup::"
             return $rc
           }
