@@ -78,10 +78,16 @@ workflow stubs into every regulated repo.
 
 Like the signing key, the token is **shared org-wide**; onboarding a new repo
 needs no new token — only that the repo is **granted access to the existing
-secret**:
+secret**. The secret's *Selected repositories* list is a **standing, recurring
+control**: it is the authoritative set of regulated release-cutting repos and
+must be extended **every time a new repo enters the regulatory tier** — it does
+not inherit or self-update.
 
 1. **Org → Settings → Secrets and variables → Actions → `QA_ORG_READ_TOKEN` →
-   Repository access → add the new repo.**
+   Repository access → add the new repo.** The UI picker **appends** — tick the
+   new repo and save. (If you grant via the CLI instead, `gh secret set …
+   --repos` **replaces** the whole access set, so pass the *full* list of every
+   release-cutting repo, not just the new one.)
 2. The repo's authorisation caller already passes the secret through (it ships
    from `templates/compliance/release-authorize-caller.yml` via compliance-drift).
 

@@ -88,8 +88,9 @@
 
    **State (2026-06-05): in progress.** Done: **A0** — `qa-approvers` granted
    **Read** (pull=true, push=false, admin=false) on TrialView; never Write, for
-   segregation of duties. Remaining: **A1** — the `QA_ORG_READ_TOKEN` org secret
-   does not yet exist (the token value cannot be minted by this automation);
+   segregation of duties. **A1** — `QA_ORG_READ_TOKEN` org secret provisioned
+   (fine-grained PAT under a dedicated machine account, org Members:read only),
+   `visibility=selected`, scoped to TrialView; verified present. Remaining:
    **A2** — the `release-authorize.yml` caller is absent (the `compliance-drift`
    workflow is not yet present in TrialView, so nothing has stubbed it); **A3** —
    TrialView's `release.yml` caller still carries the old commented `#
