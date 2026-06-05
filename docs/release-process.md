@@ -44,7 +44,7 @@ factor FRM129-…"* — a per-commit micro-tag could never make that claim.
         ▼
   ┌─────────────────────── CI: reusable release workflow ───────────────────────┐
   │  build ─► package (OCI image(s), one per component) ─► publish:registry      │
-  │  sbom (one per image) ─► vuln scan ─► attest prov + SBOM over EACH image      │
+  │  sbom (one per image) ─► vuln scan ─► sign the release manifest (tag→digests) │
   │  validation-docs ─► SHA256SUMS ─► milestone-scoped notes + CtQ matrix        │
   │  gh release create:   evaluate → DRAFT    |    active → PUBLISHED (gated)     │
   └──────────────────────────────────────────────────────────────────────────────┘
@@ -55,7 +55,7 @@ factor FRM129-…"* — a per-commit micro-tag could never make that claim.
         ▼
   ┌─────────────────────── on-server pull-agent ────────────────────────────────┐
   │  poll for the approved, published Release for this app                        │
-  │  gh attestation verify  <image>@<digest>  --signer-workflow …/release.yml     │
+  │  ssh-keygen -Y verify the signed release-manifest ─► trust its digests        │
   │  pull image BY DIGEST ─► docker compose up -d --no-deps ─► verify:production   │
   │  append an audit-log line (prior digest, new digest, verification, boot)      │
   └──────────────────────────────────────────────────────────────────────────────┘
@@ -80,36 +80,34 @@ gate, not earlier on the board.
 
 Each published Release for a regulated repo bundles the evidence below. A repo
 ships **one or more component images** (e.g. a Blazor host *and* an F# API); each
-image is listed by digest, attested, and SBOM'd independently, and the agent
-deploys the set atomically. The images live in GHCR (referenced by digest), not
-as Release assets.
+image is listed by digest in the signed manifest and SBOM'd independently, and the
+agent deploys the set atomically. The images live in GHCR (referenced by digest),
+not as Release assets.
 
 | Artifact | What it is | Clause it answers |
 | --- | --- | --- |
 | **Image digest(s)** (`ghcr.io/…@sha256:…`, one per component) | The exact, immutable artifact(s) that run | ICH E6(R3) §4.3.4 (validated state is the thing deployed); ALCOA+ *Original* |
-| **Build provenance attestation** (per image) | Keyless, OIDC-bound proof each image was built by the release workflow (a private repo uses GitHub's Sigstore instance — no public transparency log) | ICH E6(R3) §4.3.5 (controlled release); ALCOA+ *Attributable* |
-| **SBOM + its attestation** (per image) | CycloneDX bill of materials, signed, one per image | Cyber Essentials / supply-chain; dependency vulnerability posture |
+| **Signed release manifest** (one per release) | The `tag → per-component digest` map, SSH-signed by the org release-signing key; the agent verifies it against `allowed_signers` before deploying (see [release-signing-setup.md](release-signing-setup.md)) | ICH E6(R3) §4.3.5 (controlled release); ALCOA+ *Attributable* |
+| **SBOM** (per image) | CycloneDX bill of materials, one per image, attached to the Release and checksummed | Cyber Essentials / supply-chain; dependency vulnerability posture |
 | **Validation report** | CtQ → URS → V&V → acceptance → QA summary for the milestone | ICH E6(R3) §4.3.4 (validation evidence) |
 | **CtQ traceability matrix** | CtQ factor (FRM129) → Risk → Requirement → `.feature` → acceptance/QA approver | ICH E6(R3) Principle 6 (CtQ); ALCOA+ *Complete* |
 | **`SHA256SUMS`** | Checksums over the attached file assets | ALCOA+ *Accurate*, tamper evidence |
 | **Release authorisation record** | Approver identity + UTC + image digest(s), from the Environment approval | ICH E6(R3) §4.3.5; ALCOA+ *Contemporaneous*, *Attributable* |
 
-Inspector "where is X" shortcut: the image and its provenance are in **GHCR**;
-the validation report, SBOM, checksums, notes and authorisation block are on the
-**GitHub Release**; the formal re-authenticated e-signature of record is in the
-application's signature flow or the CTU QMS/eTMF (see
-[release-authorisation.md](release-authorisation.md)).
+Inspector "where is X" shortcut: the images are in **GHCR** (by digest); the
+signed release manifest, validation report, SBOM, checksums, notes and
+authorisation block are on the **GitHub Release**; the formal re-authenticated
+e-signature of record is in the application's signature flow or the CTU QMS/eTMF
+(see [release-authorisation.md](release-authorisation.md)).
 
-> **Prerequisite — GitHub Enterprise Cloud for private-repo attestations.**
-> Persisting the build-provenance and SBOM attestations for a **private** repo
-> requires **GitHub Enterprise Cloud**; Free/Pro/Team cover public repos only. On
-> a non-GHEC org the attest step fails with *"Feature not available for the
-> organization"*. The reusable workflow therefore **tolerates** an unpersisted
-> attestation in `evaluate` mode (it warns and still cuts the draft, so the rest
-> of the pipeline can be exercised) but treats it as **fatal in `active`** —
-> without provenance the pull-agent refuses to deploy the digest. Until the org
-> is on GHEC, regulated repos can run dry-run drafts but **cannot publish an
-> attested production Release**.
+> **Why no GitHub attestation.** GitHub artifact attestations are deliberately
+> **not** used: persisting them for a private repo requires GitHub Enterprise
+> Cloud, which this org does not hold. Origin is instead proven by the **SSH-signed
+> release manifest** (org signing key, verified by the agent against
+> `allowed_signers`) plus content-addressed digests — equivalent origin + integrity
+> with no licence. The full risk assessment is in
+> [release-provenance-risk-assessment.md](release-provenance-risk-assessment.md);
+> key setup in [release-signing-setup.md](release-signing-setup.md).
 
 ## Conventions
 
@@ -130,7 +128,7 @@ modes differ in what they produce and enforce:
 **`evaluate`** (the starting point):
 
 - The release workflow runs end to end and cuts a **draft** Release with the
-  full artifact set — image digest, provenance + SBOM attestations, validation
+  full artifact set — image digest, signed release manifest, SBOM(s), validation
   report, CtQ traceability matrix, `SHA256SUMS`. The team inspects this output
   for real, but nothing is published.
 - The vulnerability scan **warns** on critical/high findings but does not fail.
@@ -142,8 +140,8 @@ modes differ in what they produce and enforce:
 - The workflow cuts a **published** Release. If `environment: production` is set,
   publication blocks on the `production` Environment's required reviewers.
 - The vulnerability scan **fails** the release on any critical/high finding.
-- The pull-agent sees the published, approved Release, verifies its attestation
-  against the release workflow's identity, pulls the image **by digest**, and
+- The pull-agent sees the published, approved Release, verifies its **signed
+  release manifest** against `allowed_signers`, pulls the image **by digest**, and
   deploys it — recording the deploy in its append-only audit log.
 
 The hardened `Released` board precondition (a card may reach `Released` only

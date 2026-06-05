@@ -30,7 +30,7 @@ For an overview of CCTC and the software we publish, see the
 | `.github/workflows/compliance-check.yml` | Reusable workflow regulated repos opt into |
 | `.github/workflows/compliance-drift.yml` | Nightly drift correction across regulated repos |
 | `.github/workflows/gxp-traceability.yml` | Reusable PR gate enforcing Risk ID + Requirement ID traceability on changes to validated paths |
-| `.github/workflows/release.yml` | Reusable release workflow: builds + signs the repo's container image(s) — one per component — pushes each to GHCR by digest, attests provenance + SBOM per image (matrix), and cuts a Release with the validation evidence (see [Release process](#release-process)) |
+| `.github/workflows/release.yml` | Reusable release workflow: builds the repo's container image(s) — one per component — pushes each to GHCR by digest, generates an SBOM per image, signs a release manifest over the digests, and cuts a Release with the validation evidence (see [Release process](#release-process)) |
 | `.github/workflows/project-enforcement.yml` | 5-minute poller that diffs the regulated lifecycle board(s) and dispatches each card change to the checks under `scripts/project_enforcement/` |
 | `.github/workflows/project-card-promote.yml` | Reusable PR-driven forward-only promoter (Code review / V&V tests pass). Callers live in regulated repos. |
 | `.github/workflows/project-audit.yml` | Nightly sweep that maintains a rolling `Project enforcement drift` issue per board |
@@ -620,7 +620,7 @@ suite of checks.
   merged to the default branch and a **published** Release — carrying the
   validation report — whose tag resolves to the merge SHA (a bare tag or a
   draft release does not satisfy it; an optional config flag additionally
-  requires a verifiable provenance attestation).
+  requires a verifiably signed release manifest).
 - **Field-drift.** Changes to `Risk ID` / `Requirement ID` that no
   longer match the issue body, signoff dates in the future or before
   the issue was opened, Acceptance-after-QA, approver changes on cards at or
@@ -724,10 +724,10 @@ it leaves behind. Three orthogonal layers:
 The deploy model is **pull, never push**: production accepts no inbound
 connection. CI builds and signs the repo's container **image(s)** — one per
 deployable component (e.g. a Blazor host *and* its F# API) — pushes each to GHCR
-by immutable digest, attests every image, and cuts one Release gated by a
-`production` Environment approval. An agent **on the server** verifies each
-image's keyless attestation against the release workflow's identity, pulls them
-**by digest**, and runs the set atomically.
+by immutable digest, signs a release manifest over those digests, and cuts one
+Release gated by a `production` Environment approval. An agent **on the server**
+verifies the release's SSH-signed manifest against its `allowed_signers`, pulls the
+images **by digest**, and runs the set atomically.
 The build↔workflow binding is a per-repo manifest (`.github/release-targets.yml`,
 schema [`release-targets.schema.json`](release-targets.schema.json)) against the
 tool-agnostic build-target contract in claude-org

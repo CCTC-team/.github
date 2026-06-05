@@ -55,6 +55,27 @@ ssh-keygen -Y verify -f allowed_signers -I release@cctc-team \
   -n cctc-release -s release-manifest.json.sig < release-manifest.json
 ```
 
+## Onboarding a new regulated repo
+
+The signing key and the agent's `allowed_signers` are **shared org-wide** — one
+key signs every regulated repo's manifest, and the agent trusts that one key. So
+onboarding a new repo needs **no new key and no `allowed_signers` change**; it
+needs the new repo **granted access to the existing secret**:
+
+1. **Org → Settings → Secrets and variables → Actions → `RELEASE_SIGNING_KEY` →
+   Repository access → add the new repo.** (Or, via CLI, re-run the
+   `gh secret set … --visibility selected --repos repo-a,repo-b,new-repo` with the
+   full list — `--repos` replaces the set, so include every regulated repo.)
+2. The repo's release caller already passes the secret through — it ships from
+   `templates/compliance/release-caller.yml` via the compliance-drift workflow, so
+   nothing per-repo is authored by hand.
+
+If this step is missed, the new repo's release job has no `RELEASE_SIGNING_KEY`:
+an `active` release fails at the signing step (and the agent would refuse the
+unsigned manifest), an `evaluate` dry-run warns and leaves the manifest unsigned.
+This is called out in the regulated-repo onboarding checklist
+(wiki `Onboarding-a-Regulated-Repo`).
+
 ## Rotation
 
 Rotating the key is a **governed change** (it is a release control): generate a
