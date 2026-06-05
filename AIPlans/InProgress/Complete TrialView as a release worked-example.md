@@ -86,16 +86,18 @@
    `release-authorize.yml` caller is present (stubbed by compliance-drift); set
    `approvers_team: qa-approvers` in TrialView's release caller.
 
-   **State (2026-06-05): in progress.** Done: **A0** — `qa-approvers` granted
-   **Read** (pull=true, push=false, admin=false) on TrialView; never Write, for
+   **State (2026-06-05): §A COMPLETE.** **A0** — `qa-approvers` granted **Read**
+   (pull=true, push=false, admin=false) on TrialView; never Write, for
    segregation of duties. **A1** — `QA_ORG_READ_TOKEN` org secret provisioned
    (fine-grained PAT under a dedicated machine account, org Members:read only),
-   `visibility=selected`, scoped to TrialView; verified present. Remaining:
-   **A2** — the `release-authorize.yml` caller is absent (the `compliance-drift`
-   workflow is not yet present in TrialView, so nothing has stubbed it); **A3** —
-   TrialView's `release.yml` caller still carries the old commented `#
-   environment: production` line and has **not** been updated to
-   `approvers_team:`.
+   `visibility=selected`, scoped to TrialView; verified present. **A2** —
+   `.github/workflows/release-authorize.yml` caller added to TrialView (verbatim
+   from the org template). **A3** — TrialView's `release.yml` caller set to
+   `approvers_team: qa-approvers`, `issues:` raised to `write`, and the stale
+   removed-Environment-gate comments refreshed. A2+A3 committed signed directly to
+   TrialView `develop` (commit `f756c9c`); caller stays `enforcement: evaluate`
+   (approvers_team has no effect until the gate-4 active flip). Verified present on
+   `origin/develop`.
 
 3. **Pull-agent on staging (needs server access — ops).** The agent code is
    built + tested but not deployed. Per `server-structure/agent/PREREQUISITES.md`:
