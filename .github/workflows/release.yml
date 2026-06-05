@@ -489,16 +489,43 @@ jobs:
           push-to-registry: true
 
   # ---------------------------------------------------------------------------
-  # Publish the Release. When `environment` is set (e.g. production), THIS job
-  # blocks on that Environment's required reviewers — so the approver who
-  # authorises the release is recorded here, post-approval. Draft in evaluate,
-  # published in active.
+  # Optional approval gate. Instantiated ONLY when an `environment` is configured;
+  # it blocks on that Environment's required reviewers, so a release into a gated
+  # environment (e.g. production) cannot proceed until an authoriser approves —
+  # the approval is recorded against this run and stamped into the notes below.
+  #
+  # Its `if:` is a pure-`inputs` expression so GitHub resolves it at workflow
+  # startup and skips the job — and its Environment — cleanly when no environment
+  # is set. A skip-condition that referenced `needs.*` (runtime) would instead
+  # force GitHub to eagerly validate an empty Environment name and fail the whole
+  # run at startup. That is exactly why the gate is a separate job and not an
+  # `environment:` on the publish job itself.
   # ---------------------------------------------------------------------------
-  release:
+  authorize:
     needs: [build, attest]
-    if: needs.build.outputs.applicable == 'true'
+    if: inputs.environment != ''
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    steps:
+      - name: Record the authorisation gate
+        run: echo "Release of ${{ inputs.tag }} authorised to proceed under environment '${{ inputs.environment }}'."
+
+  # ---------------------------------------------------------------------------
+  # Publish the Release. When an `environment` is set, the approval gate above
+  # blocks the run before this job, so the authoriser is recorded against this
+  # run; this job then stamps that authorisation into the notes. Draft in
+  # evaluate, published in active. Runs whether `authorize` ran (environment set
+  # and approved) or was skipped (no environment) — hence the explicit result
+  # check rather than plain `needs` success semantics.
+  # ---------------------------------------------------------------------------
+  release:
+    needs: [build, attest, authorize]
+    if: >-
+      !cancelled()
+      && needs.build.outputs.applicable == 'true'
+      && needs.attest.result == 'success'
+      && (needs.authorize.result == 'success' || needs.authorize.result == 'skipped')
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read

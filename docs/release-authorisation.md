@@ -20,9 +20,12 @@ Configure it once, per repo:
 3. Optionally set a **wait timer** and restrict deployment branches/tags to
    `v*`.
 4. In the repo's release caller (`.github/workflows/release.yml`), set
-   `environment: production` so the publish job blocks on this approval.
+   `environment: production` so the release pauses at this approval before it
+   publishes.
 
-When the release workflow reaches the publish job in `active` mode, it pauses;
+When an `environment` is set, a dedicated approval-gate job runs after the build
+and attestation and **before** the publish job, holding the run on this
+Environment's required reviewers; the publish job only proceeds once approved.
 GitHub records **who** approved, **when** (UTC), and the run is bound to the exact
 **image digest(s)** being released (one per component image). That approval is
 logged, timestamped, and attributable.
