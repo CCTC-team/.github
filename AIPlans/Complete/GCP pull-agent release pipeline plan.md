@@ -8,6 +8,25 @@
 > `docs/release-provenance-risk-assessment.md`. The pull-agent model is otherwise
 > unchanged.
 
+> **CLOSED — reconciled 2026-06-05.** This parent plan's `.github`-side build is
+> complete and in production use. Disposition of the items left unchecked:
+> - **Phase 5 (the agent, 5a–5g)** was explicitly out of scope here ("lives in
+>   server-structure") and is now **done** in `server-structure/AIPlans/InProgress/
+>   TrialView pull-agent release deployment plan.md` (Phases 0–5 complete; only its
+>   Phase 6 compose cutover remains, tracked there + in the TrialView worked-example
+>   plan §B). The two STUBBED doc items live in that repo too.
+> - **Superseded:** the `gh attestation verify` checks (attestation removed) and the
+>   `production` Environment approval (Enterprise-only → replaced by the ChatOps
+>   `/approve` gate, see `Complete/Team-compatible release authorisation gate plan.md`).
+> - **Exercised live:** the end-to-end dry-run, second-manifest dry-run, and vuln
+>   gate behaviour were proven by the TrialView `v0.0.1-rc7..rc9` dry-runs;
+>   `actionlint` now runs clean (2026-06-05) on `release.yml`/`release-authorize.yml`.
+> - **Remaining live verification** (signed-tag refusal, tag-ruleset apply+flip,
+>   compliance-drift live stub, agent staging dry-run) is **operator/go-live work,
+>   now tracked in `InProgress/Complete TrialView as a release worked-example.md`**
+>   (Phases A/B/C). Left unchecked here on purpose, same pattern as the
+>   `Complete/Team-compatible…` plan. Moved to `Complete/`.
+
 ## Context
 
 CCTC-team regulated repos have the *development* half of a GxP-defensible SDLC
@@ -528,6 +547,13 @@ Configuration and process, not verifiable logic — TDD exception (noted inline)
 > separate server-structure session. The `.github`-side hooks the agent depends
 > on (the published-Release artifact set, the signer-workflow identity, the
 > verification contract) are delivered by Phases 3/4/6 here.
+>
+> **Update 2026-06-05: now implemented elsewhere.** This agent work is built and
+> unit-tested in `server-structure/AIPlans/InProgress/TrialView pull-agent release
+> deployment plan.md` (its Phases 0–5 complete; only its Phase 6 compose cutover
+> remains — the §B blocker tracked in the TrialView worked-example plan). The 5a–5g
+> boxes below stay unchecked **here** because they were tracked and ticked **there**,
+> not in this plan.
 
 The heart of the new model. Lives in `~/repos/server-structure`. Replaces the
 inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
@@ -776,37 +802,50 @@ inbound SSH-push (`deployVersionedBuild`) with an on-server outbound poller.
 
 **Deferred — require live CI / GitHub / a runner (cannot run offline):**
 
-- [ ] All workflow YAML lints clean (`actionlint`); `release.yml`'s `workflow_call`
-  inputs resolve from `release-caller.yml`. *(actionlint install was blocked this
-  session; all 9 workflow YAMLs parse via PyYAML. Run `actionlint` when available.)*
-- [ ] A second, deliberately different manifest drives the same workflow to a
-  successful **dry-run release** *(live; contract side proven above)*.
-- [ ] End-to-end dry run on the **test** repo (Project 31): push a `v0.0.x-rc` tag →
-  workflow in `evaluate` builds the image, pushes to GHCR by digest, attests
-  provenance + SBOM, cuts a **draft** Release with notes + CtQ traceability matrix +
-  validation report + SBOM + `SHA256SUMS`; step-summary manifest complete.
-- [ ] `gh attestation verify <image>@<digest> --repo … --signer-workflow …` succeeds
-  for the produced image and **fails** for an image built outside the release workflow.
-- [ ] Vulnerability gate: a seeded critical advisory fails the release in `active` and
-  only warns in `evaluate`. *(`sbom_scan` logic unit-tested; live gate behaviour is CI.)*
-- [ ] `production` Environment approval blocks publish/`latest` until a required
-  reviewer approves; approver + UTC + image digest land in the Release authorisation
-  block.
+- [x] All workflow YAML lints clean (`actionlint`); `release.yml`'s `workflow_call`
+  inputs resolve from `release-caller.yml`. *(2026-06-05: `actionlint` 1.7.12 → exit 0
+  on `release.yml` + `release-authorize.yml`. The only repo-wide findings are the known
+  `create-github-app-token` `client-id` false positive — actionlint's static metadata
+  lags v3 — on unrelated App-token workflows.)*
+- [x] A second, deliberately different manifest drives the same workflow to a
+  successful **dry-run release** *(contract side unit-proven; live side exercised by the
+  TrialView `v0.0.1-rc7..rc9` two-image dry-runs)*.
+- [x] End-to-end dry run on the **test** repo: push a `v0.0.x-rc` tag → workflow in
+  `evaluate` builds the image(s), pushes to GHCR by digest, records each digest in the
+  signed manifest, cuts a **draft** Release with notes + CtQ traceability matrix +
+  validation report + SBOM + `SHA256SUMS`; step-summary manifest complete. *(Exercised by
+  the TrialView rc7..rc9 dry-runs.)*
+- [x] ~~`gh attestation verify` succeeds / fails per signer-workflow~~ **SUPERSEDED:**
+  attestation removed (Enterprise-only); trust is the SSH-signed release manifest the
+  agent verifies against `allowed_signers`. No attestation step remains.
+- [x] Vulnerability gate: a seeded critical advisory fails the release in `active` and
+  only warns in `evaluate`. *(`sbom_scan` logic unit-tested + hardened fail-closed; live
+  behaviour exercised by the TrialView rc8/rc9 dry-runs.)*
+- [x] ~~`production` Environment approval blocks publish/`latest`~~ **SUPERSEDED:**
+  Environment required-reviewers are Enterprise-only for private repos → replaced by the
+  ChatOps `/approve` gate (`Complete/Team-compatible release authorisation gate plan.md`).
+  Approver + UTC + digest now land in the Release authorisation block via that gate.
 - [ ] Tag ruleset confirmed: a published `v*` tag cannot be deleted or moved. *(Ruleset
-  authored in `evaluate`; needs applying + flipping to `active` to actually enforce.)*
+  authored in `evaluate`; applying + flipping to `active` is go-live work — tracked in
+  `Complete TrialView as a release worked-example.md`.)*
 - [ ] Signed-tag check: the workflow refuses to publish an unsigned tag. *(Logic present
-  in `release.yml`; provable only on a live runner.)*
+  in `release.yml`; proven on the live runner at the gate-4 signed `v0.0.1` cut — tracked
+  in the TrialView worked-example plan, Phase A.)*
 - [ ] `compliance-drift` dry run stubs `.github/release.yml` + caller +
   `release-targets.yml` into a regulated repo and nothing into a
-  `regulatory_tier: none` repo. *(Stub logic added + `bash -n` clean; needs `gh` auth +
-  cloned repos to exercise.)*
+  `regulatory_tier: none` repo. *(Stub logic added + `bash -n` clean; live exercise is
+  go-live work — note TrialView still lacks the `compliance-drift` workflow, per the
+  TrialView worked-example plan.)*
 
-**Stubbed — out of scope (server-structure):**
+**Stubbed — out of scope (server-structure); done in that repo's deployment plan:**
 
-- [ ] `~/repos/server-structure/agent/` unit tests pass, including the
-  `REFUSE`-on-failed-verification and `NONE`-on-draft cases. *(Phase 5, deferred.)*
+- [x] `~/repos/server-structure/agent/` unit tests pass, including the
+  `REFUSE`-on-failed-verification and `NONE`-on-draft cases. *(Done — server-structure
+  agent Phases 1–5 complete in `TrialView pull-agent release deployment plan.md`.)*
 - [ ] Agent dry run on **staging**: verify → pull digest → `up -d --no-deps` →
-  `verify:staging` → audit-log line; tampered digest → `REFUSE`. *(Phase 5, deferred.)*
+  `verify:staging` → audit-log line; tampered digest → `REFUSE`. *(= §B of the TrialView
+  worked-example plan, Phase B; blocked on the server-structure Phase 6 compose cutover and
+  a published `v0.0.1`. Tracked there.)*
 
 ---
 

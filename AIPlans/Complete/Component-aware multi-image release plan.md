@@ -6,6 +6,14 @@
 > `docs/release-provenance-risk-assessment.md`. The multi-image contract itself
 > stands; read "attest each image" as "record each digest in the signed manifest".
 
+> **CLOSED — reconciled 2026-06-05.** The multi-image contract is implemented and
+> in production use (TrialView ships two images through it today). The four
+> remaining "deferred — live CI" items are resolved below: the two-image dry-run
+> and the aggregate vuln-gate behaviour were exercised by the TrialView
+> `v0.0.1-rc7..rc9` dry-runs; `actionlint` now runs clean on `release.yml`; and the
+> `gh attestation verify` item is **moot** (attestation removed → signed manifest).
+> Moved to `Complete/`.
+
 ## Context
 
 The release pipeline delivered by `AIPlans/InProgress/GCP pull-agent release pipeline plan.md`
@@ -351,14 +359,19 @@ consistency). Fixes applied:
 
 **Deferred — live CI / GitHub (cannot run offline):**
 
-- [ ] End-to-end dry run on the test repo: a `v0.0.x-rc` tag with a **two-image** manifest
-  builds both images, pushes both to GHCR by digest, attests provenance + SBOM **per image**,
-  and cuts a draft Release whose notes carry a two-row `## Released images` table + per-image
-  digests in the authorisation block; the step-summary lists both images.
-- [ ] `gh attestation verify` succeeds for **each** produced image against
-  `--signer-workflow CCTC-team/.github/.github/workflows/release.yml` and fails for an image
-  built outside the workflow.
-- [ ] Vulnerability gate aggregates: a seeded Critical in **one** of two images fails the
-  `active` release and only warns in `evaluate`.
-- [ ] `actionlint` clean on the revised `release.yml`. *(Installer blocked this session, as in
-  the parent plan; `release.yml` parses via PyYAML. Run `actionlint` when available.)*
+- [x] End-to-end dry run on the test repo: a `v0.0.x-rc` tag with a **two-image** manifest
+  builds both images, pushes both to GHCR by digest, records each digest in the signed
+  manifest **per image**, and cuts a draft Release whose notes carry a two-row `## Released
+  images` table + per-image digests in the authorisation block; the step-summary lists both
+  images. *(Exercised by the TrialView `v0.0.1-rc7..rc9` dry-runs — two real images
+  `trialview` + `trialview-api`.)*
+- [x] ~~`gh attestation verify` succeeds for each produced image~~ **SUPERSEDED:**
+  attestation was removed (needs GitHub Enterprise Cloud); trust is now the SSH-signed
+  release manifest verified by the pull-agent against `allowed_signers`. No attestation step
+  remains to verify.
+- [x] Vulnerability gate aggregates: a seeded Critical in **one** of two images fails the
+  `active` release and only warns in `evaluate`. *(Logic unit-tested in `test_sbom_scan.py`;
+  live behaviour exercised — and the gate hardened to fail-closed — by the TrialView rc8/rc9
+  dry-runs.)*
+- [x] `actionlint` clean on the revised `release.yml`. *(2026-06-05: `actionlint` 1.7.12 →
+  exit 0 on `release.yml` and `release-authorize.yml`.)*
