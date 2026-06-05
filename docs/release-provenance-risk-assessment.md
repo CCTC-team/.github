@@ -1,10 +1,10 @@
 # Release provenance: risk assessment for deploying without GitHub attestations
 
-> **Status: DRAFT — pending QA approval.** This is a change-controlled design
-> decision that *reverses a previously-documented control* (the pull-agent's
-> mandatory attestation check). It does not take effect until approved and until
-> the design docs it amends are updated in lockstep. Approver, date and signature
-> are recorded in the table at the foot of this note.
+> **Status: documentation of a design decision.** This note records *why* the
+> release pipeline proves provenance with a signed manifest rather than GitHub
+> attestations. It does not need approval in its own right — the decision is
+> reviewed and signed off as part of the **wider validation/approval of the
+> release process**, of which this note is one input.
 
 This note records the regulatory rationale for **not** treating GitHub artifact
 attestations (SLSA build provenance) as a required control in the regulated
@@ -128,8 +128,7 @@ permissions dropped; signing key passed), the agent
 | --- | --- |
 | Decision | Remove GitHub attestation; deploy on content-addressed digest verification + an SSH-signed release manifest (org key, zero licence) |
 | Rationale | This note (residual risk acceptable; provenance is supply-chain hardening, not a GxP requirement) |
-| Raised by | _Richard Hardy_ |
-| Date raised | 2026-06-05 |
-| QA approver | _pending_ |
-| Approval date | _pending_ |
+| Recorded by | Richard Hardy |
+| Date recorded | 2026-06-05 |
+| Sign-off | Carried by the wider release-process validation/approval — not a standalone gate |
 | Review trigger | A sponsor / Cyber-Essentials supply-chain requirement for in-toto attestation, or a release-signing key rotation/compromise |

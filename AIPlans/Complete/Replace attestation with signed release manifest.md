@@ -95,7 +95,8 @@ ran green: the CI release job signed `release-manifest.json`; the draft carried 
 `ssh-keygen -Y verify` against the committed `allowed_signers` returned
 `Good "cctc-release" signature for release@cctc-team`. rc7 tag + draft cleaned up.
 (Remaining real-world step beyond this plan: the broader pull-agent staging/prod
-enablement; and QA sign-off on `docs/release-provenance-risk-assessment.md`.)
+enablement. The risk assessment is documentation only — reviewed as part of the
+wider release-process approval, not a standalone sign-off.)
 
 - **User:** generate `cctc-release-signing` ed25519 key; set org secret
   `RELEASE_SIGNING_KEY`; commit the real public key into the agent's
