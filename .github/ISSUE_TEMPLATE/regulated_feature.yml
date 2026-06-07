@@ -1,5 +1,5 @@
 name: Regulated feature (V&V)
-description: A user requirement / feature for a GxP-regulated build. Captures the risk linkage, URS, and feature tests for full ICH E6 (R3) traceability.
+description: A user requirement / feature for a GxP-regulated build. Captures risk linkage, URS, and feature tests for ICH E6 (R3) traceability.
 title: "[Feature]: "
 labels: ["regulated", "validation"]
 body:
@@ -9,40 +9,21 @@ body:
         Use this template for any feature in a GxP-regulated software product.
         One card = one User Requirement.
 
-        After creating the issue, add it to the validation project board (a copy of
-        `[TEMPLATE] Regulated Feature Lifecycle`) and set the **Risk ID**,
-        **Requirement ID**, **Test Type**, **Critical-to-Quality**, **Acceptance Approver**,
-        **Acceptance Signoff Date**, **QA Approver**, **QA Signoff Date**, and
-        **Deviation Ref** fields on the card.
+        Provide the **Risk ID**, **Requirement ID**, the **User spec** (URS), and
+        the **Feature link(s)** below so the requirement can be traced through
+        verification and validation. Acceptance and QA are confirmed via the
+        checklists at the bottom.
 
-        **Critical-to-Quality** classifies the feature's bearing on participant
-        safety and result reliability, mirroring the CtQ form's three-way
-        classification:
-        - **Critical** — compromise breaks participant safety or result
-          reliability. Requires a **Test Type** that includes PQ
-          (`PQ`, `OQ+PQ`, or `IQ+OQ+PQ`).
-        - **Important** — significant but not critical. Requires a verification
-          **Test Type**, but PQ is not mandatory and `N/A` is not acceptable.
-        - **No** — neither critical nor important. No Test Type constraint.
-
-        The `User spec:` and `Feature link:` sections below are load-bearing —
-        their exact labels are parsed by the gh-val validation tool. Do not
-        rename them.
-
-        **The acceptance / QA checkboxes below are enforced by board automation.**
-        The project-enforcement workflow reads them from the issue body when a
-        card moves into User acceptance / QA approved; unticked items block the move
-        with a `process-violation` comment + label. They are not just process
-        guidance.
+        Keep the section headings below unchanged — downstream validation
+        tooling relies on them.
 
   - type: input
     id: risk-id
     attributes:
       label: "Risk ID:"
       description: |
-        ID(s) from the canonical org-level risk register (Excel) that this feature
-        addresses. Comma-separated if multiple. Example: `RISK-014, RISK-022`.
-        Mirror this value into the project card's Risk ID field after creation.
+        ID(s) from the project's risk register that this feature addresses.
+        Comma-separated if multiple. Example: `RISK-014, RISK-022`.
     validations:
       required: true
 
@@ -50,7 +31,7 @@ body:
     id: requirement-id
     attributes:
       label: "Requirement ID:"
-      description: Identifier from the URS document. Example `REQ-024`. Mirror to the project card's Requirement ID field.
+      description: Identifier from the User Requirement Specification. Example `REQ-024`.
     validations:
       required: true
 
@@ -68,8 +49,7 @@ body:
       label: "User spec:"
       description: |
         URL to the `.spec` file holding the User Requirement Specification.
-        Must be on the configured default branch and end with `.spec`.
-        Parsed by gh-val — keep the label exact.
+        Must be on the default branch and end with `.spec`.
       placeholder: "https://github.com/<org>/<repo>/blob/<branch>/user_requirement_specification/<area>/<name>.spec"
     validations:
       required: true
@@ -80,8 +60,7 @@ body:
       label: "Feature link:"
       description: |
         One URL per line. URLs to `.feature` files (Gherkin) that prove this requirement.
-        Must be on the configured default branch and end with `.feature`.
-        Parsed by gh-val — keep the label exact.
+        Must be on the default branch and end with `.feature`.
       placeholder: |
         https://github.com/<org>/<repo>/blob/<branch>/features/<area>/<name>.feature
     validations:
@@ -92,15 +71,9 @@ body:
     attributes:
       label: "User acceptance checklist:"
       description: |
-        User acceptance. An end-user representative — not the code author
-        and not the test author — confirms the feature meets the URS in a
-        development/test environment. This is a feature-level acceptance
-        check, NOT the formal Performance Qualification (PQ): the genuine
-        PQ is performed on the built release candidate in a qualified
-        environment at the release-pipeline authorisation gate, not on the
-        board. Tick all before advancing the card to User acceptance
-        status. The Acceptance Approver and Acceptance Signoff Date fields
-        on the project card must be set before moving on to QA review.
+        An end-user representative — not the code author and not the test
+        author — confirms the feature meets the URS in a development/test
+        environment. Tick all before advancing to user acceptance.
       options:
         - label: Feature meets the user requirement against the URS in a development/test environment
         - label: Workflow is usable in practice (not just technically passing)
@@ -110,15 +83,10 @@ body:
     attributes:
       label: "QA review checklist:"
       description: |
-        QA process oversight (development evidence). QA (not the code
-        author, not the test author, not the acceptance reviewer) confirms
-        the development validation evidence is complete and the
+        QA (not the code author, not the test author, not the acceptance
+        reviewer) confirms the validation evidence is complete and the
         URS → V&V → user-acceptance chain is intact for this requirement.
-        This is feature-level QA of the development evidence — the final QA
-        of the assembled release, together with the release-level PQ, is
-        recorded at the release-pipeline authorisation gate, not here. Tick
-        all before advancing the card to QA approved. The QA Approver and
-        QA Signoff Date fields on the project card must be set.
+        Tick all before advancing to QA approved.
       options:
-        - label: Risk linkage verified against the canonical risk register
+        - label: Risk linkage verified against the risk register
         - label: URS → V&V evidence chain intact; any deviations are documented
