@@ -1,4 +1,4 @@
-# CODEOWNERS for the org-level .github repository.
+# CODEOWNERS for the public org-level .github repository.
 #
 # Owners listed here are automatically requested for review when matching
 # files are changed. Order matters: the last matching pattern wins.
@@ -12,7 +12,5 @@
 # Security policy — security team must approve changes
 /SECURITY.md                     @CCTC-team/CCTC-team-maintainers
 
-# Label manifest and sync workflow — affects every repo in the org
-/labels.json                     @CCTC-team/CCTC-team-maintainers
-/.github/workflows/              @CCTC-team/CCTC-team-maintainers
-/scripts/                        @CCTC-team/CCTC-team-maintainers
+# Organisation profile page
+/profile/                        @CCTC-team/CCTC-team-maintainers
