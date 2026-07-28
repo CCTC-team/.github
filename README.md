@@ -15,7 +15,6 @@ For an overview of CCTC and the software we publish, see the
 | --- | --- |
 | `.github/ISSUE_TEMPLATE/bug_report.yml` | Standard bug-report form |
 | `.github/ISSUE_TEMPLATE/feature_request.yml` | Standard feature-request form |
-| `.github/ISSUE_TEMPLATE/regulated_feature.yml` | Regulated feature (V&V) form — populates Risk ID + Requirement ID for the GxP traceability gate |
 | `.github/ISSUE_TEMPLATE/config.yml` | Disables blank issues; adds security + support contact links |
 | `.github/pull_request_template.md` | Default PR template with clinical/compliance checklist |
 | `SECURITY.md` | Org-wide vulnerability reporting policy |
@@ -45,3 +44,10 @@ the **private** [`CCTC-team/compliance-engine`](https://github.com/CCTC-team/com
 repository (org members only). Regulated repos opt into its reusable workflows
 via `uses: CCTC-team/compliance-engine/...`. This repo intentionally carries
 none of that.
+
+That includes the **regulated feature (V&V) issue form**, which is *not* an
+org-wide default and is not served from here. It is delivered into each
+regulated repository's own `.github/ISSUE_TEMPLATE/`, and kept in step there,
+because its body contract is co-owned with the enforcement engine's parsers — a
+copy that drifts silently desyncs the gate. To read or fill that form, use the
+copy in the repository the requirement belongs to; it is the only one of record.
