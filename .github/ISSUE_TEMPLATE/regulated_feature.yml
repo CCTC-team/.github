@@ -11,8 +11,14 @@ body:
 
         Provide the **Risk ID**, **Requirement ID**, the **User spec** (URS), and
         the **Feature link(s)** below so the requirement can be traced through
-        verification and validation. Acceptance and QA are confirmed via the
-        checklists at the bottom.
+        verification and validation.
+
+        Acceptance and QA sign-off are **not recorded in this issue**. They are
+        recorded in the project's validation workflow as attributable, dated
+        approvals — an approver identity and a sign-off date — because a ticked
+        checkbox records neither who attested nor when. What each approver will
+        be asked to attest is set out at the bottom of this form, so the author
+        knows what the requirement must be able to satisfy.
 
         Keep the section headings below unchanged — downstream validation
         tooling relies on them.
@@ -66,27 +72,28 @@ body:
     validations:
       required: true
 
-  - type: checkboxes
-    id: user-acceptance
+  - type: markdown
     attributes:
-      label: "User acceptance checklist:"
-      description: |
-        An end-user representative — not the code author and not the test
-        author — confirms the feature meets the URS in a development/test
-        environment. Tick all before advancing to user acceptance.
-      options:
-        - label: Feature meets the user requirement against the URS in a development/test environment
-        - label: Workflow is usable in practice (not just technically passing)
+      value: |
+        ---
 
-  - type: checkboxes
-    id: qa-review
-    attributes:
-      label: "QA review checklist:"
-      description: |
-        QA (not the code author, not the test author, not the acceptance
-        reviewer) confirms the validation evidence is complete and the
-        URS → V&V → user-acceptance chain is intact for this requirement.
-        Tick all before advancing to QA approved.
-      options:
-        - label: Risk linkage verified against the risk register
-        - label: URS → V&V evidence chain intact; any deviations are documented
+        ### What the approvers will attest
+
+        Recorded in the project's validation workflow, not in this issue. Set
+        out here so the meaning of each sign-off is known when the requirement
+        is written, and so segregation of duties is planned for rather than
+        discovered late.
+
+        **User acceptance** — an end-user representative, who is neither the
+        code author nor the test author, attests that:
+
+        - the feature meets the user requirement against the URS in a
+          development/test environment; and
+        - the workflow is usable in practice, not just technically passing.
+
+        **QA review** — QA, who is none of the code author, the test author or
+        the acceptance approver, attests that:
+
+        - risk linkage is verified against the project's risk register; and
+        - the URS → V&V → acceptance chain is intact, with any deviations
+          documented.
